@@ -1,0 +1,243 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL")
+}
+
+// Enable TimescaleDB extension
+// Run: CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members          Member[]
+  platformConfigs  PlatformConfig[]
+  metrics          Metric[]
+  threats          Threat[]
+
+  @@map("clients")
+}
+
+model PlatformConfig {
+  id          String   @id @default(cuid())
+  clientId    String
+  platform    Platform
+  enabled     Boolean  @default(true)
+  config      Json     // Platform-specific configuration
+  credentials Json     // Encrypted credentials
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, platform])
+  @@map("platform_configs")
+}
+
+enum Platform {
+  DISCORD
+  GITHUB
+  TWITTER
+}
+
+model Member {
+  id          String   @id @default(cuid())
+  clientId    String
+  displayName String?
+  email       String?  @unique
+  walletAddress String?
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platformIdentities PlatformIdentity[]
+  messages          Message[]
+  events            Event[]
+
+  @@index([clientId])
+  @@index([email])
+  @@map("members")
+}
+
+model PlatformIdentity {
+  id               String   @id @default(cuid())
+  memberId         String
+  platform         Platform
+  platformUserId   String
+  username         String
+  displayName      String?
+  matchMethod      String?  // explicit, email, username_exact, username_fuzzy, wallet
+  matchConfidence  Float?   @default(1.0) // 0-1
+  metadata         Json?    @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, platformUserId])
+  @@index([memberId])
+  @@index([platform, username])
+  @@map("platform_identities")
+}
+
+model Message {
+  id               String   @id @default(cuid())
+  clientId         String
+  memberId         String?
+  platform         Platform
+  platformMessageId String
+  channelId        String?  // Discord channel, GitHub repo, Twitter conversation
+  threadId         String?  // For threaded messages
+  content          String
+  rawContent       Json?    @default("{}")
+  sentiment        Float?   // -1 to 1
+  metadata         Json?    @default("{}")
+  createdAt        DateTime @default(now())
+
+  member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([platform, platformMessageId])
+  @@index([clientId, createdAt])
+  @@index([memberId])
+  @@index([platform, channelId])
+  @@map("messages")
+}
+
+// Enable as hypertable for time-series data
+// Run: SELECT create_hypertable('messages', 'created_at');
+
+model Event {
+  id           String   @id @default(cuid())
+  clientId     String
+  memberId     String?
+  platform     Platform
+  eventType    EventType
+  eventData    Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([memberId])
+  @@index([eventType])
+  @@map("events")
+}
+
+// Enable as hypertable for time-series data
+// Run: SELECT create_hypertable('events', 'created_at');
+
+enum EventType {
+  MESSAGE_REACTION
+  MENTION
+  LINK_CLICK
+  JOIN
+  LEAVE
+  STAR
+  FORK
+  PUSH
+  PULL_REQUEST_OPENED
+  PULL_REQUEST_MERGED
+  PULL_REQUEST_CLOSED
+  ISSUE_OPENED
+  ISSUE_CLOSED
+  ISSUE_COMMENT
+  TWEET
+  REPLY
+  RETWEET
+  LIKE
+  FOLLOW
+  UNFOLLOW
+}
+
+model Metric {
+  id          String   @id @default(cuid())
+  clientId    String
+  metricType  MetricType
+  value       Float
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, metricType, createdAt])
+  @@map("metrics")
+}
+
+// Enable as hypertable for time-series data
+// Run: SELECT create_hypertable('metrics', 'created_at');
+
+enum MetricType {
+  DAU          // Daily Active Users
+  WAU          // Weekly Active Users
+  MAU          // Monthly Active Users
+  MESSAGE_VOLUME
+  RESPONSE_RATE
+  CONTRIBUTOR_VELOCITY
+  SENTIMENT_AVERAGE
+  SENTIMENT_POSITIVE
+  SENTIMENT_NEGATIVE
+  GROWTH_RATE
+  MEMBER_COUNT
+  ONLINE_COUNT
+}
+
+model Threat {
+  id          String      @id @default(cuid())
+  clientId    String
+  platform    Platform
+  threatType  ThreatType
+  severity    ThreatSeverity
+  status      ThreatStatus @default(DETECTED)
+  content     String
+  evidence    Json?       @default("{}") // Screenshots, links, context
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  resolvedAt  DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, status, severity])
+  @@index([platform])
+  @@index([createdAt])
+  @@map("threats")
+}
+
+enum ThreatType {
+  HARASSMENT
+  IMPERSONATION
+  SPAM
+  COORDINATED
+  FUD
+  OTHER
+}
+
+enum ThreatSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ThreatStatus {
+  DETECTED
+  REVIEWING
+  ACTIONED
+  RESOLVED
+  FALSE_POSITIVE
+}

@@ -1,0 +1,25 @@
+{
+  "name": "attrakt-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Attrakt Intelligence MVP Platform",
+  "scripts": {
+    "dev": "pnpm --filter './packages/*' --filter './apps/*' dev",
+    "build": "pnpm --filter './packages/*' --filter './apps/*' build",
+    "lint": "pnpm --filter './packages/*' --filter './apps/*' lint",
+    "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
+    "test": "pnpm --filter './packages/*' --filter './apps/*' test",
+    "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "prettier": "^3.2.4",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
