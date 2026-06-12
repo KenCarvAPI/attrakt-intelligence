@@ -33,14 +33,20 @@ shipped · **STUB** = scaffolding only, does not do the job on a schedule/real d
 > and GitHub ingestion would **not** have persisted anything as shipped (the
 > `log.child` crash), not merely "lacked a launch script."
 >
-> **Note B — BullMQ transport caveat (not fixed; out of scope).** The installed
+> **Note B — BullMQ `:` incompatibility (RESOLVED 2026-06-12).** The installed
 > `bullmq@5.66.4` **rejects queue names containing `:`** ("Queue name cannot
-> contain :"), but the entire job/queue scheme uses names like `ingest:discord`
-> and `compute:metrics`. So the Redis-backed queue transport cannot start in this
-> environment regardless of wiring. Verifications below therefore exercise the
-> **real domain logic directly against live Postgres** (bypassing the queue
-> transport). Renaming the queue scheme (or pinning a `:`-tolerant bullmq) is a
-> follow-up beyond these four tasks.
+> contain :"), but the job scheme uses names like `ingest:discord` and
+> `compute:metrics`, so the Redis-backed queue transport could not start at all.
+> **Fixed** by adding `toQueueName()` (`packages/api/src/queues/types.ts`), which
+> maps the logical job type to a BullMQ-safe queue name (`:` → `-`) at the
+> Queue/Worker construction boundary only — job *data* and job *names* keep the
+> original `:` identifier. Applied in `workers.ts` (`createWorker`/`createQueue`),
+> `scheduler.ts`, and `server.ts`. **Verified end-to-end:** a Discord message
+> driven through the real `addJob('ingest:discord')` → BullMQ → worker path
+> persisted Message + Event rows (job name `ingest:discord`, queue
+> `ingest-discord`); the API server boots and registers all six queues in Redis
+> (`ingest-discord`, `ingest-github`, `ingest-twitter`, `compute-metrics`,
+> `agent-pulse`, `agent-threat-scan`) with the scheduler + metrics worker running.
 
 ---
 
@@ -54,9 +60,9 @@ scripts to `packages/mcp-servers/package.json`, mirroring `github-webhook` /
 `processMessage` processor against live Postgres — a test message produced a
 `Message` row (sentiment computed), `MENTION` + `LINK_CLICK` `Event` rows, and a
 `Member` + `PlatformIdentity`. The live Discord *gateway* connection still
-requires a real `DISCORD_BOT_TOKEN` (not available in this sandbox), and the
-BullMQ queue hop is subject to Note B — but the persistence path itself is
-confirmed working.
+requires a real `DISCORD_BOT_TOKEN` (not available in this sandbox); the BullMQ
+queue hop is now also verified end-to-end after the Note B fix (a job driven
+through `addJob('ingest:discord')` → worker persisted the rows).
 
 _Original finding (pre-fix):_
 
@@ -166,7 +172,8 @@ note, and `messages`/`events`/`metrics` run as plain Postgres tables.
 `MAU=1`, `MESSAGE_VOLUME=2`, `RESPONSE_RATE=50`, `CONTRIBUTOR_VELOCITY=6`,
 `SENTIMENT_AVERAGE=0.2`, `GROWTH_RATE=100`, `MEMBER_COUNT=1`. Confirmed the
 target Postgres has no `timescaledb_information.hypertables` and the three tables
-are ordinary tables. The scheduler/worker BullMQ hop is subject to Note B.
+are ordinary tables. After the Note B fix the scheduler + worker also boot
+cleanly with the API server (queue `compute-metrics` registered in Redis).
 
 _Original finding (pre-fix):_
 

@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import { redisConnection } from './connection';
-import type { ComputeMetricsJobData } from './types';
+import { toQueueName, type ComputeMetricsJobData } from './types';
 import { config, log } from '@attrakt/core';
 
 /**
@@ -8,7 +8,7 @@ import { config, log } from '@attrakt/core';
  * Runs hourly for all clients
  */
 export function scheduleMetricsComputation() {
-  const queue = new Queue<ComputeMetricsJobData>('compute:metrics', {
+  const queue = new Queue<ComputeMetricsJobData>(toQueueName('compute:metrics'), {
     connection: redisConnection,
   });
 

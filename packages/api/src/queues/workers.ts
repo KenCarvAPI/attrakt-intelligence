@@ -1,13 +1,13 @@
 import { Worker, Queue, Job } from 'bullmq';
 import { redisConnection } from './connection';
-import { type JobData } from './types';
+import { type JobData, toQueueName } from './types';
 
 /**
  * Create workers for each job type
  * Workers will be implemented in respective packages (ingestion workers, agent workers)
  */
 export function createWorker(jobType: string, processor: (job: Job<JobData>) => Promise<void>) {
-  return new Worker<JobData>(jobType, processor, {
+  return new Worker<JobData>(toQueueName(jobType), processor, {
     connection: redisConnection,
     concurrency: 5,
     removeOnComplete: {
@@ -24,7 +24,7 @@ export function createWorker(jobType: string, processor: (job: Job<JobData>) => 
  * Helper to create a queue for a job type
  */
 export function createQueue(jobType: string) {
-  return new Queue(jobType, {
+  return new Queue(toQueueName(jobType), {
     connection: redisConnection,
     defaultJobOptions: {
       attempts: 3,

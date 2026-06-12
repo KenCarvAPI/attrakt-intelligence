@@ -4,7 +4,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { Queue } from 'bullmq';
 import { redisConnection } from './queues/connection';
-import { jobTypes } from './queues/types';
+import { jobTypes, toQueueName } from './queues/types';
 import { performHealthCheck } from './health';
 import { scheduleMetricsComputation } from './queues/scheduler';
 import { createMetricsWorker } from './queues/metrics-worker';
@@ -33,7 +33,7 @@ const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath('/admin/queues');
 
 const queues = jobTypes.map(
-  (jobType) => new Queue(jobType, { connection: redisConnection })
+  (jobType) => new Queue(toQueueName(jobType), { connection: redisConnection })
 );
 
 createBullBoard({
