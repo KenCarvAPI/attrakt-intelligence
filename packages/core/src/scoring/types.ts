@@ -50,6 +50,11 @@ export interface MemberScoringInput {
   reactionsReceived: number;
   /** Messages sent — denominator for the influence ratio. */
   messagesSent: number;
+  /**
+   * Claude-evaluated helpfulness (0-100) for this member and period, if one has
+   * been computed and cached. Undefined falls back to 0 in the maths.
+   */
+  helpfulnessScore?: number;
 }
 
 /** A fully computed score for one member, ready to persist. */

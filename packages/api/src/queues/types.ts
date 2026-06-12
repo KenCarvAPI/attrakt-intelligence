@@ -8,6 +8,7 @@ export const jobTypes = [
   'ingest:twitter',
   'compute:metrics',
   'compute:scoring',
+  'generate:brief',
   'agent:pulse',
   'agent:threat-scan',
 ] as const;
@@ -43,6 +44,13 @@ export interface ComputeScoringJobData {
   referenceDate?: string;
 }
 
+export interface GenerateBriefJobData {
+  clientId: string;
+  memberId: string;
+  /** Optional client Context Profile grounding (future phase). */
+  context?: string;
+}
+
 export interface AgentPulseJobData {
   clientId: string;
   date?: string; // ISO date string, defaults to today
@@ -59,5 +67,6 @@ export type JobData =
   | IngestTwitterJobData
   | ComputeMetricsJobData
   | ComputeScoringJobData
+  | GenerateBriefJobData
   | AgentPulseJobData
   | AgentThreatScanJobData;

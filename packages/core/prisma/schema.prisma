@@ -28,6 +28,8 @@ model Client {
   threats          Threat[]
   advocateScores   AdvocateScore[]
   scoringConfig    ScoringConfig?
+  advocateBriefs   AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
 
   @@map("clients")
 }
@@ -71,6 +73,8 @@ model Member {
   messages          Message[]
   events            Event[]
   advocateScores    AdvocateScore[]
+  advocateBriefs    AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
 
   @@index([clientId])
   @@index([email])
@@ -304,4 +308,49 @@ model ScoringConfig {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("scoring_configs")
+}
+
+// Cache of the Claude-evaluated helpfulness component, keyed per member per
+// period. Populated by the scoring agent (which has the Anthropic client) and
+// read back by the core scoring pipeline so the maths stays Claude-free.
+model HelpfulnessEvaluation {
+  id           String   @id @default(cuid())
+  memberId     String
+  clientId     String
+  period       String   // ISO week, e.g. "2026-W24"
+  score        Float    // 0-100, as rated by Claude
+  rationale    String?  // short justification returned alongside the score
+  sampleSize   Int      @default(0) // number of messages sampled
+  model        String   // Claude model used
+  promptVersion String  // versioned prompt template id
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, period])
+  @@index([clientId, period])
+  @@map("helpfulness_evaluations")
+}
+
+// A Claude-generated advocate brief: a structured profile of a member used by
+// the community team. The brief itself is stored as JSON; metadata captures how
+// it was produced so briefs can be regenerated and compared over time.
+model AdvocateBrief {
+  id              String   @id @default(cuid())
+  memberId        String
+  clientId        String
+  brief           Json     // structured brief (see packages/agents/src/scoring-agent/briefs.ts)
+  model           String   // Claude model used
+  promptVersion   String   // versioned prompt template id
+  contextProfileUsed Boolean @default(false) // whether a client Context Profile grounded the brief
+  createdAt       DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+  @@index([clientId, createdAt])
+  @@map("advocate_briefs")
 }

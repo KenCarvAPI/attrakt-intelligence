@@ -116,15 +116,15 @@ export function influenceScore(
  * Helpfulness: a Claude-evaluated component judging how genuinely helpful a
  * member's contributions are (answering questions, unblocking others, etc).
  *
- * >>> INTEGRATION POINT <<<
- * Deferred to the next prompt. This is intentionally stubbed at 0. The Claude
- * integration will live in packages/agents (alongside the pulse/threat agents,
- * which already construct an Anthropic client) and feed its result in via
- * MemberScoringInput, replacing this stub. Keeping it at 0 here means the
- * component contributes nothing until that work lands.
+ * The rating itself is produced by the scoring agent in packages/agents (which
+ * holds the Anthropic client) and cached per member per period in the
+ * HelpfulnessEvaluation table; the orchestration layer reads it back and passes
+ * it in here. When no rating has been computed yet, `rawScore` is undefined and
+ * the component contributes 0 — so the maths never depends on Claude being run.
  */
-export function helpfulnessScore(): number {
-  return 0;
+export function helpfulnessScore(rawScore?: number): number {
+  if (rawScore === undefined) return 0;
+  return clamp100(rawScore);
 }
 
 // --- Composite --------------------------------------------------------------
@@ -164,7 +164,7 @@ export function scoreMember(
       input.reactionsReceived,
       input.messagesSent
     ),
-    helpfulnessScore: helpfulnessScore(),
+    helpfulnessScore: helpfulnessScore(input.helpfulnessScore),
   };
 
   return {

@@ -74,8 +74,12 @@ describe('component scores', () => {
     expect(influenceScore(600, 0, 300)).toBe(100); // ratio 2.0, well above target
   });
 
-  it('helpfulness is stubbed at 0 pending the Claude integration', () => {
-    expect(helpfulnessScore()).toBe(0);
+  it('helpfulness passes through a cached Claude rating, defaulting to 0', () => {
+    expect(helpfulnessScore()).toBe(0); // no rating yet
+    expect(helpfulnessScore(undefined)).toBe(0);
+    expect(helpfulnessScore(73)).toBe(73);
+    expect(helpfulnessScore(120)).toBe(100); // clamped
+    expect(helpfulnessScore(-5)).toBe(0); // clamped
   });
 
   it('clamps component values into [0, 100]', () => {
@@ -111,6 +115,19 @@ describe('composite scoring', () => {
         `breadth=${advocate.components.breadthScore.toFixed(1)}, ` +
         `influence=${advocate.components.influenceScore.toFixed(1)})`
     );
+  });
+
+  it('feeds a Claude helpfulness rating into the composite', () => {
+    const withoutRating = scoreMember(ADVOCATE, DEFAULT_WEIGHTS);
+    const withRating = scoreMember(
+      { ...ADVOCATE, helpfulnessScore: 90 },
+      DEFAULT_WEIGHTS
+    );
+
+    expect(withoutRating.components.helpfulnessScore).toBe(0);
+    expect(withRating.components.helpfulnessScore).toBe(90);
+    // Helpfulness weight is 0.10, so a 90-point rating lifts the composite by 9.
+    expect(withRating.compositeScore - withoutRating.compositeScore).toBeCloseTo(9, 5);
   });
 
   it('keeps the composite within [0, 100]', () => {

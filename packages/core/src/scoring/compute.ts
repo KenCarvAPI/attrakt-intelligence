@@ -58,6 +58,7 @@ function distinctDayKeys(dates: Date[]): Set<string> {
 async function gatherMemberInput(
   clientId: string,
   memberId: string,
+  period: string,
   periodStart: Date,
   periodEnd: Date,
   windowStart: Date
@@ -120,6 +121,13 @@ async function gatherMemberInput(
       : 0;
   const reactionsReceived = 0; // see LIMITATION above
 
+  // Helpfulness: read the Claude-evaluated rating cached for this member and
+  // period, if the scoring agent has produced one. Absent → undefined → 0.
+  const helpfulness = await prisma.helpfulnessEvaluation.findUnique({
+    where: { memberId_period: { memberId, period } },
+    select: { score: true },
+  });
+
   return {
     memberId,
     messageCount,
@@ -129,6 +137,7 @@ async function gatherMemberInput(
     repliesReceived,
     reactionsReceived,
     messagesSent: messageCount,
+    helpfulnessScore: helpfulness?.score,
   };
 }
 
@@ -159,6 +168,7 @@ export async function computeAdvocateScores(
     const input = await gatherMemberInput(
       clientId,
       memberId,
+      period,
       periodStart,
       periodEnd,
       windowStart

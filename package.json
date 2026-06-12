@@ -10,7 +10,8 @@
     "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
     "test": "pnpm --filter './packages/*' --filter './apps/*' test",
     "clean": "pnpm --filter './packages/*' --filter './apps/*' clean",
-    "scoring:run": "pnpm --filter @attrakt/agents scoring:run"
+    "scoring:run": "pnpm --filter @attrakt/agents scoring:run",
+    "brief:generate": "pnpm --filter @attrakt/agents brief:generate"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

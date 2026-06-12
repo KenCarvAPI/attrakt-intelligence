@@ -35,6 +35,8 @@ const ConfigSchema = z.object({
 
   // Anthropic (Claude)
   anthropicApiKey: z.string().optional(),
+  // Single source of truth for the Claude model used across all agents.
+  claudeModel: z.string().default('claude-sonnet-4-6'),
 
   // Slack
   slackWebhookUrl: z.string().url().optional(),
@@ -81,6 +83,7 @@ function loadConfig(): Config {
       twitterTrackedAccounts: process.env.TWITTER_TRACKED_ACCOUNTS,
       twitterPollIntervalMs: process.env.TWITTER_POLL_INTERVAL_MS,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+      claudeModel: process.env.CLAUDE_MODEL,
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
       resendApiKey: process.env.RESEND_API_KEY,
       resendFromEmail: process.env.RESEND_FROM_EMAIL,

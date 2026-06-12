@@ -4,3 +4,7 @@ export * from './threat-agent';
 export * from './threat-agent/worker';
 export * from './scoring-agent';
 export * from './scoring-agent/worker';
+export * from './scoring-agent/helpfulness';
+export * from './scoring-agent/briefs';
+export * from './scoring-agent/brief-worker';
+export * from './prompts';

@@ -1,5 +1,6 @@
 import { Worker, Queue, Job } from 'bullmq';
-import { redisConnection, jobTypes, type JobData } from './types';
+import { redisConnection } from './connection';
+import type { JobData } from './types';
 
 /**
  * Create workers for each job type

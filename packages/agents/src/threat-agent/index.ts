@@ -136,7 +136,7 @@ Be conservative - only flag clear threats. Avoid false positives.`;
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: config.claudeModel,
       max_tokens: 500,
       messages: [
         {

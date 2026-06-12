@@ -6,16 +6,28 @@
  * weekly run, and is also driven directly by the `scoring:run` CLI.
  */
 import { Queue } from 'bullmq';
-import { computeAdvocateScores, log } from '@attrakt/core';
+import { computeAdvocateScores, config, log } from '@attrakt/core';
 import { redisConnection } from '@attrakt/api';
 import type { ComputeScoringJobData } from '@attrakt/api/src/queues/types';
+import { evaluateHelpfulness } from './helpfulness';
 
 /**
  * Compute and persist advocate scores for a client. `referenceDate` selects the
  * ISO week to score and defaults to now.
+ *
+ * When an Anthropic key is configured, the Claude-evaluated helpfulness
+ * component is refreshed (and cached) first so it feeds into the composite; if
+ * no key is set, scoring still runs with helpfulness at 0.
  */
 export async function processScoringJob(clientId: string, referenceDate?: string) {
   const date = referenceDate ? new Date(referenceDate) : new Date();
+
+  if (config.anthropicApiKey) {
+    await evaluateHelpfulness(clientId, { referenceDate: date });
+  } else {
+    log.warn({ clientId }, 'ANTHROPIC_API_KEY not set — scoring without helpfulness component');
+  }
+
   return computeAdvocateScores(clientId, date);
 }
 

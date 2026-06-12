@@ -75,6 +75,12 @@ importers:
       '@attrakt/core':
         specifier: workspace:*
         version: link:../core
+      '@prisma/client':
+        specifier: ^5.9.0
+        version: 5.22.0(prisma@5.22.0)
+      bullmq:
+        specifier: ^5.4.0
+        version: 5.66.4
       node-cron:
         specifier: ^3.0.3
         version: 3.0.3
@@ -137,12 +143,21 @@ importers:
       '@prisma/client':
         specifier: ^5.9.0
         version: 5.22.0(prisma@5.22.0)
+      discord.js:
+        specifier: ^14.14.1
+        version: 14.25.1
+      octokit:
+        specifier: ^3.1.2
+        version: 3.2.2
       pino:
         specifier: ^8.17.2
         version: 8.21.0
       pino-pretty:
         specifier: ^10.3.1
         version: 10.3.1
+      twitter-api-v2:
+        specifier: ^1.15.2
+        version: 1.28.0
       zod:
         specifier: ^3.22.4
         version: 3.25.76
