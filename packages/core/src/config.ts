@@ -58,9 +58,11 @@ const ConfigSchema = z.object({
 type Config = z.infer<typeof ConfigSchema>;
 
 function loadConfig(): Config {
-  try {
-    return ConfigSchema.parse({
-      nodeEnv: process.env.NODE_ENV,
+  // Treat empty strings (common when an unused var is left blank in .env) as
+  // unset, so `.optional()` / `.default()` fields behave as expected instead of
+  // failing `.url()` / `.email()` validation on "".
+  const raw: Record<string, string | undefined> = {
+    nodeEnv: process.env.NODE_ENV,
       defaultClientId: process.env.DEFAULT_CLIENT_ID,
       port: process.env.PORT,
       githubWebhookPort: process.env.GITHUB_WEBHOOK_PORT,
@@ -91,7 +93,14 @@ function loadConfig(): Config {
       storageAccessKeyId: process.env.STORAGE_ACCESS_KEY_ID,
       storageSecretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY,
       storageBucket: process.env.STORAGE_BUCKET,
-    });
+    };
+
+  const normalized = Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [key, value === '' ? undefined : value])
+  );
+
+  try {
+    return ConfigSchema.parse(normalized);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const missing = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('\n');

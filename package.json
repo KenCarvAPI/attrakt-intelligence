@@ -9,7 +9,14 @@
     "lint": "pnpm --filter './packages/*' --filter './apps/*' lint",
     "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
     "test": "pnpm --filter './packages/*' --filter './apps/*' test",
-    "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
+    "clean": "pnpm --filter './packages/*' --filter './apps/*' clean",
+    "dev:check": "pnpm --filter @attrakt/api dev:check",
+    "dev:api": "pnpm --filter @attrakt/api dev",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "db:generate": "pnpm --filter @attrakt/core db:generate",
+    "db:migrate": "pnpm --filter @attrakt/core db:migrate",
+    "db:seed": "pnpm --filter @attrakt/core db:seed"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

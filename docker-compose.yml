@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
@@ -12,8 +10,10 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Enables the TimescaleDB extension on first DB init.
+      - ./packages/core/prisma/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U attrakt"]
+      test: ["CMD-SHELL", "pg_isready -U attrakt -d attrakt"]
       interval: 10s
       timeout: 5s
       retries: 5
