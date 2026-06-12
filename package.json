@@ -9,6 +9,7 @@
     "lint": "pnpm --filter './packages/*' --filter './apps/*' lint",
     "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
     "test": "pnpm --filter './packages/*' --filter './apps/*' test",
+    "member:merge": "pnpm --filter @attrakt/core member:merge",
     "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
   },
   "devDependencies": {

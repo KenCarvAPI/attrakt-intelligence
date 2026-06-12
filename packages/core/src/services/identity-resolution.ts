@@ -182,6 +182,95 @@ export async function resolveIdentity(
   return { memberId: newMember.id, matchMethod: 'username_exact', confidence: 1.0 };
 }
 
+export interface MergeMemberResult {
+  targetId: string;
+  sourceId: string;
+  reassigned: {
+    platformIdentities: number;
+    messages: number;
+    events: number;
+  };
+}
+
+/**
+ * Merge one member into another.
+ *
+ * Reassigns the source member's PlatformIdentities, Messages, and Events to the
+ * target member, then soft-deletes the source (sets `deletedAt` and
+ * `mergedIntoId`). Runs in a single transaction so there is never a partial
+ * state where rows are split across both members.
+ *
+ * After a successful merge the source member owns zero identities/messages/events
+ * (no orphans) and is marked deleted; all of its history lives on the target.
+ */
+export async function mergeMember(sourceId: string, targetId: string): Promise<MergeMemberResult> {
+  if (sourceId === targetId) {
+    throw new Error('Cannot merge a member into itself');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const source = await tx.member.findUnique({ where: { id: sourceId } });
+    if (!source) {
+      throw new Error(`Source member ${sourceId} not found`);
+    }
+    if (source.deletedAt) {
+      throw new Error(`Source member ${sourceId} is already merged/deleted`);
+    }
+
+    const target = await tx.member.findUnique({ where: { id: targetId } });
+    if (!target) {
+      throw new Error(`Target member ${targetId} not found`);
+    }
+    if (target.deletedAt) {
+      throw new Error(`Target member ${targetId} is merged/deleted; pick a live target`);
+    }
+
+    // Reassign all owned rows from source to target.
+    const identities = await tx.platformIdentity.updateMany({
+      where: { memberId: sourceId },
+      data: { memberId: targetId },
+    });
+    const messages = await tx.message.updateMany({
+      where: { memberId: sourceId },
+      data: { memberId: targetId },
+    });
+    const events = await tx.event.updateMany({
+      where: { memberId: sourceId },
+      data: { memberId: targetId },
+    });
+
+    // Keep the target's firstSeen as the earliest of the two, lastSeen as latest.
+    await tx.member.update({
+      where: { id: targetId },
+      data: {
+        firstSeen: source.firstSeen < target.firstSeen ? source.firstSeen : target.firstSeen,
+        lastSeen: source.lastSeen > target.lastSeen ? source.lastSeen : target.lastSeen,
+      },
+    });
+
+    // Soft-delete the source. Null its unique email so the address is freed for
+    // future members and can't collide with the (now-merged) record.
+    await tx.member.update({
+      where: { id: sourceId },
+      data: {
+        deletedAt: new Date(),
+        mergedIntoId: targetId,
+        email: null,
+      },
+    });
+
+    return {
+      targetId,
+      sourceId,
+      reassigned: {
+        platformIdentities: identities.count,
+        messages: messages.count,
+        events: events.count,
+      },
+    };
+  });
+}
+
 /**
  * Calculate contributor score for a member
  */

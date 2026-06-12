@@ -64,6 +64,12 @@ model Member {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Soft-delete: set when this member is merged into another (mergedIntoId
+  // points at the surviving member). Consumers should treat deletedAt != null
+  // as inactive.
+  deletedAt    DateTime?
+  mergedIntoId String?
+
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformIdentities PlatformIdentity[]
   messages          Message[]
@@ -71,6 +77,7 @@ model Member {
 
   @@index([clientId])
   @@index([email])
+  @@index([deletedAt])
   @@map("members")
 }
 

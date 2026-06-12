@@ -16,7 +16,7 @@ shipped · **STUB** = scaffolding only, does not do the job on a schedule/real d
 |---|-----------|---------|-----------------|-----------|
 | 1 | Discord ingestion (persist Messages + Events) | **WORKS** ✅ (fixed 2026-06-12) | Added `discord-bot` + `discord-worker` launch scripts; fixed three runtime blockers that prevented any worker from running (see note A). Verified end-to-end against live Postgres: a test message persists a `Message` row + `MENTION`/`LINK_CLICK` `Event` rows + `Member`/`PlatformIdentity`. | `packages/mcp-servers/src/discord-bot/index.ts`, `discord-bot/worker.ts`, `discord-bot/index-worker.ts`, `packages/mcp-servers/package.json` |
 | 2 | GitHub ingestion (persist activity) | **WORKS** ✅ (hardened 2026-06-12) | Webhook receiver + worker persist `Event` rows; now **enforces `X-Hub-Signature-256` HMAC verification** (`GITHUB_WEBHOOK_SECRET`) — unsigned/invalid payloads get 401. (Note A's `log.child` crash also applied here pre-fix.) GitHub still creates no `Message` rows (by design). | `packages/mcp-servers/src/github-webhook/index.ts`, `github-webhook/verify.ts`, `github-webhook/verify.test.ts`, `github-bot/worker.ts` |
-| 3 | Identity resolution (merge identities into Members) | **PARTIAL** | Links new `PlatformIdentity` rows to a `Member` via 5 strategies and creates new members; **does not merge two already-distinct Member records**, and cross-platform linking leans almost entirely on username | `packages/core/src/services/identity-resolution.ts` |
+| 3 | Identity resolution (merge identities into Members) | **WORKS** ✅ (gap closed 2026-06-12) | The 5 auto-link strategies were already implemented; added the missing piece — a transactional `mergeMember(sourceId, targetId)` that reassigns identities/messages/events to the target and soft-deletes the source (`pnpm member:merge --source <id> --target <id>`). Verified no orphan rows remain. Username-only cross-platform linking remains a known limitation (out of scope). | `packages/core/src/services/identity-resolution.ts`, `src/scripts/merge-member.ts`, `src/services/merge-member.test.ts`, `prisma/schema.prisma` |
 | 4 | pulse-agent (real digest from real data) | **PARTIAL** | Produces a real markdown digest from live DB rows via Claude (with template fallback) and delivers it; but the **metrics section is empty (N/A)** because nothing populates the `Metric` table (see #5) | `packages/agents/src/pulse-agent/index.ts` |
 | 5 | Metric model + scheduled writes (TimescaleDB deferred) | **WORKS** ✅ (fixed 2026-06-12) | API startup now calls `scheduleMetricsComputation()` + `createMetricsWorker()`; computation extracted to `computeMetrics()` and exposed via `pnpm --filter @attrakt/api metrics:compute`. Verified: a manual run wrote 11 `Metric` rows with real values against plain Postgres. TimescaleDB **explicitly deferred** for MVP (tables work as plain Postgres). | `packages/api/src/server.ts`, `queues/scheduler.ts`, `queues/metrics-worker.ts`, `queues/metrics-cli.ts`, `packages/core/prisma/migrations/0_enable_timescaledb.sql` |
 
@@ -106,10 +106,18 @@ _Original finding (pre-fix):_
   It does link a *new* identity onto an *existing* member and does create new
   members. So "merge PlatformIdentity records into Members" works for the
   new-identity case.
-- **What it does not do:** it never **merges two already-distinct `Member`
-  records**. If the same human was created as separate members (e.g. Discord
-  member created first, then GitHub member created before any matching signal
-  existed), nothing later collapses them. There is no de-dup/merge pass.
+- **What it did not do (now FIXED 2026-06-12):** it never **merged two
+  already-distinct `Member` records**. Added `mergeMember(sourceId, targetId)`:
+  in a single `prisma.$transaction` it reassigns the source's `PlatformIdentity`,
+  `Message`, and `Event` rows to the target, widens the target's
+  `firstSeen`/`lastSeen` window, then soft-deletes the source (`deletedAt`,
+  `mergedIntoId`, and nulls the source's unique `email` to free it). Exposed as
+  `pnpm member:merge --source <id> --target <id>`. Verified by an integration
+  test (`merge-member.test.ts`: asserts the source owns 0 identities/messages/
+  events afterward and is soft-deleted) and a live CLI run. Two new `Member`
+  columns (`deletedAt`, `mergedIntoId`) back the soft-delete. _Follow-up:_
+  metric/pulse queries don't yet filter `deletedAt != null`, so a merged shell
+  still counts toward `MEMBER_COUNT` (out of scope here).
 - **Signal reality check:** Discord ingestion passes only `displayName` (no
   email, no wallet); GitHub push passes `email`, but other GitHub events pass
   none. So cross-platform linking depends almost entirely on **username exact/
