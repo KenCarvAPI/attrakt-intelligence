@@ -57,6 +57,7 @@ enum Platform {
   DISCORD
   GITHUB
   TWITTER
+  DISCOURSE
 }
 
 model Member {
@@ -179,6 +180,9 @@ enum EventType {
   LIKE
   FOLLOW
   UNFOLLOW
+  GOVERNANCE_POST
+  GOVERNANCE_VOTE
+  GOVERNANCE_PROPOSAL
 }
 
 model Metric {
