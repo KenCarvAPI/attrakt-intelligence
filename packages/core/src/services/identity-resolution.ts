@@ -28,10 +28,11 @@ export async function resolveIdentity(
 ): Promise<IdentityMatchResult> {
   const normalizedUsername = normalizeUsername(username);
 
-  // Strategy 1: Check for existing platform identity
+  // Strategy 1: Check for existing platform identity *within this tenant*
   const existingIdentity = await prisma.platformIdentity.findUnique({
     where: {
-      platform_platformUserId: {
+      clientId_platform_platformUserId: {
+        clientId,
         platform,
         platformUserId,
       },
@@ -61,6 +62,7 @@ export async function resolveIdentity(
     if (emailMember) {
       await prisma.platformIdentity.create({
         data: {
+          clientId,
           memberId: emailMember.id,
           platform,
           platformUserId,
@@ -93,6 +95,7 @@ export async function resolveIdentity(
   if (exactMatch) {
     await prisma.platformIdentity.create({
       data: {
+        clientId,
         memberId: exactMatch.memberId,
         platform,
         platformUserId,
@@ -121,6 +124,7 @@ export async function resolveIdentity(
     if (isFuzzyUsernameMatch(normalizedUsername, normalizeUsername(identity.username))) {
       await prisma.platformIdentity.create({
         data: {
+          clientId,
           memberId: identity.memberId,
           platform,
           platformUserId,
@@ -146,6 +150,7 @@ export async function resolveIdentity(
     if (walletMember) {
       await prisma.platformIdentity.create({
         data: {
+          clientId,
           memberId: walletMember.id,
           platform,
           platformUserId,
@@ -168,6 +173,7 @@ export async function resolveIdentity(
       walletAddress: options.walletAddress?.toLowerCase(),
       platformIdentities: {
         create: {
+          clientId,
           platform,
           platformUserId,
           username,

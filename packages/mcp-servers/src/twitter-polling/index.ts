@@ -1,5 +1,5 @@
-import { addJob, getTwitterClient, config, log } from '@attrakt/core';
-import type { JobData, IngestTwitterJobData } from '@attrakt/api/src/queues/types';
+import { addJob, getTwitterClient, getTwitterTrackedAccountsByClient, config, log } from '@attrakt/core';
+import type { JobData } from '@attrakt/api/src/queues/types';
 
 const twitterClient = getTwitterClient().readOnly;
 
@@ -8,44 +8,47 @@ const twitterClient = getTwitterClient().readOnly;
  */
 async function pollMentions() {
   try {
-    // Get tracked accounts from config (comma-separated)
-    const trackedAccounts = config.twitterTrackedAccounts.split(',').filter(Boolean);
+    // Each client configures its own tracked accounts; attribute tweets to the
+    // owning client rather than a single global tenant.
+    const byClient = await getTwitterTrackedAccountsByClient();
 
-    if (trackedAccounts.length === 0) {
-      log.debug({}, 'No Twitter accounts tracked');
+    if (byClient.length === 0) {
+      log.debug({}, 'No Twitter accounts tracked for any client');
       return;
     }
 
-    for (const account of trackedAccounts) {
-      try {
-        // Search for mentions in the last 15 minutes
-        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-        const query = `@${account.trim()}`;
+    for (const { clientId, accounts } of byClient) {
+      for (const account of accounts) {
+        try {
+          // Search for mentions in the last 15 minutes
+          const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+          const query = `@${account.trim()}`;
 
-        const tweets = await twitterClient.v2.search({
-          query,
-          start_time: since,
-          max_results: 100,
-        });
+          const tweets = await twitterClient.v2.search({
+            query,
+            start_time: since,
+            max_results: 100,
+          });
 
-        for (const tweet of tweets.data?.data || []) {
-          await addJob('ingest:twitter', {
-            event: 'mention',
-            payload: {
-              tweetId: tweet.id,
-              text: tweet.text,
-              authorId: tweet.author_id || '',
-              createdAt: tweet.created_at,
-              query,
-              trackedAccount: account,
-            },
-            clientId: config.defaultClientId,
-          } as JobData);
+          for (const tweet of tweets.data?.data || []) {
+            await addJob('ingest:twitter', {
+              event: 'mention',
+              payload: {
+                tweetId: tweet.id,
+                text: tweet.text,
+                authorId: tweet.author_id || '',
+                createdAt: tweet.created_at,
+                query,
+                trackedAccount: account,
+              },
+              clientId,
+            } as JobData);
+          }
+
+          log.info({ clientId, account, count: tweets.data?.data?.length || 0 }, 'Found mentions');
+        } catch (error) {
+          log.error({ error, clientId, account }, 'Error polling mentions');
         }
-
-        log.info({ account, count: tweets.data?.data?.length || 0 }, 'Found mentions');
-      } catch (error) {
-        log.error({ error, account }, 'Error polling mentions');
       }
     }
   } catch (error) {
@@ -71,32 +74,37 @@ async function pollEngagement() {
  */
 async function pollFollowerCounts() {
   try {
-    const trackedAccounts = config.twitterTrackedAccounts.split(',').filter(Boolean);
+    const byClient = await getTwitterTrackedAccountsByClient();
 
-    for (const account of trackedAccounts) {
-      try {
-        const user = await twitterClient.v2.userByUsername(account.trim(), {
-          'user.fields': ['public_metrics'],
-        });
+    for (const { clientId, accounts } of byClient) {
+      for (const account of accounts) {
+        try {
+          const user = await twitterClient.v2.userByUsername(account.trim(), {
+            'user.fields': ['public_metrics'],
+          });
 
-        if (user.data) {
-          await addJob('ingest:twitter', {
-            event: 'follower_count',
-            payload: {
-              username: account.trim(),
-              userId: user.data.id,
-              followerCount: user.data.public_metrics?.followers_count || 0,
-              followingCount: user.data.public_metrics?.following_count || 0,
-              tweetCount: user.data.public_metrics?.tweet_count || 0,
-              timestamp: Date.now(),
-            },
-            clientId: config.defaultClientId,
-          } as JobData);
+          if (user.data) {
+            await addJob('ingest:twitter', {
+              event: 'follower_count',
+              payload: {
+                username: account.trim(),
+                userId: user.data.id,
+                followerCount: user.data.public_metrics?.followers_count || 0,
+                followingCount: user.data.public_metrics?.following_count || 0,
+                tweetCount: user.data.public_metrics?.tweet_count || 0,
+                timestamp: Date.now(),
+              },
+              clientId,
+            } as JobData);
 
-          log.debug({ account, followerCount: user.data.public_metrics?.followers_count }, 'Follower count polled');
+            log.debug(
+              { clientId, account, followerCount: user.data.public_metrics?.followers_count },
+              'Follower count polled'
+            );
+          }
+        } catch (error) {
+          log.error({ error, clientId, account }, 'Error polling follower count');
         }
-      } catch (error) {
-        log.error({ error, account }, 'Error polling follower count');
       }
     }
   } catch (error) {

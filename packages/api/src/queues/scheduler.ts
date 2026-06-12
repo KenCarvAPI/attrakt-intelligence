@@ -1,65 +1,46 @@
 import { Queue } from 'bullmq';
 import { redisConnection } from './connection';
 import type { ComputeMetricsJobData } from './types';
-import { config, log } from '@attrakt/core';
+import { getActiveClients, log } from '@attrakt/core';
 
 /**
- * Schedule metrics computation jobs
- * Runs hourly for all clients
+ * Schedule metrics computation jobs.
+ *
+ * Runs hourly/daily/weekly for *every active client* rather than a single
+ * hardcoded tenant. Repeatable jobs are keyed by clientId+period so each
+ * client gets its own independent schedule.
  */
-export function scheduleMetricsComputation() {
+export async function scheduleMetricsComputation() {
   const queue = new Queue<ComputeMetricsJobData>('compute:metrics', {
     connection: redisConnection,
   });
 
-  // Schedule hourly metrics computation
-  const scheduleHourly = () => {
-    // For each client, schedule metrics computation
-    // In MVP, we'll use a default client or fetch from database
-    const clientId = config.defaultClientId;
+  const clients = await getActiveClients();
 
-    queue.add(
-      'compute:metrics',
-      {
-        clientId,
-        period: 'hour',
-      },
-      {
-        repeat: {
-          pattern: '0 * * * *', // Every hour
-        },
-      }
-    );
+  if (clients.length === 0) {
+    log.warn({}, 'No active clients found; no metrics computation scheduled');
+    return;
+  }
 
-    // Also schedule daily and weekly metrics
-    queue.add(
-      'compute:metrics',
-      {
-        clientId,
-        period: 'day',
-      },
-      {
-        repeat: {
-          pattern: '0 0 * * *', // Daily at midnight
-        },
-      }
-    );
+  const schedules: Array<{ period: ComputeMetricsJobData['period']; pattern: string }> = [
+    { period: 'hour', pattern: '0 * * * *' }, // Every hour
+    { period: 'day', pattern: '0 0 * * *' }, // Daily at midnight
+    { period: 'week', pattern: '0 0 * * 0' }, // Weekly on Sunday
+  ];
 
-    queue.add(
-      'compute:metrics',
-      {
-        clientId,
-        period: 'week',
-      },
-      {
-        repeat: {
-          pattern: '0 0 * * 0', // Weekly on Sunday
-        },
-      }
-    );
+  for (const client of clients) {
+    for (const { period, pattern } of schedules) {
+      await queue.add(
+        'compute:metrics',
+        { clientId: client.id, period },
+        {
+          // Distinct job id per client+period so schedules don't collide.
+          jobId: `compute:metrics:${client.id}:${period}`,
+          repeat: { pattern },
+        }
+      );
+    }
+  }
 
-    log.info({ clientId }, 'Scheduled metrics computation jobs');
-  };
-
-  scheduleHourly();
+  log.info({ clientCount: clients.length }, 'Scheduled metrics computation jobs for active clients');
 }

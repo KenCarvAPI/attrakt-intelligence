@@ -212,7 +212,8 @@ async function processMemberLeave(payload: DiscordMemberPayload, clientId: strin
     // Find member by platform identity
     const identity = await prisma.platformIdentity.findUnique({
       where: {
-        platform_platformUserId: {
+        clientId_platform_platformUserId: {
+          clientId,
           platform: 'DISCORD',
           platformUserId: payload.userId,
         },
@@ -257,7 +258,8 @@ async function processReaction(payload: DiscordReactionPayload, clientId: string
     // Find member by platform identity
     const identity = await prisma.platformIdentity.findUnique({
       where: {
-        platform_platformUserId: {
+        clientId_platform_platformUserId: {
+          clientId,
           platform: 'DISCORD',
           platformUserId: payload.userId,
         },

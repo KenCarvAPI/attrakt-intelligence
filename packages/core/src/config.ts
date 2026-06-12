@@ -3,7 +3,6 @@ import { z } from 'zod';
 const ConfigSchema = z.object({
   // Application
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
-  defaultClientId: z.string().default('default'),
   port: z.coerce.number().default(3001),
   githubWebhookPort: z.coerce.number().default(3002),
 
@@ -30,7 +29,7 @@ const ConfigSchema = z.object({
   twitterBearerToken: z.string().optional(),
   twitterClientId: z.string().optional(),
   twitterClientSecret: z.string().optional(),
-  twitterTrackedAccounts: z.string().default(''),
+  // Tracked Twitter accounts are configured per-client via PlatformConfig.
   twitterPollIntervalMs: z.coerce.number().default(900000),
 
   // Anthropic (Claude)
@@ -61,7 +60,6 @@ function loadConfig(): Config {
   try {
     return ConfigSchema.parse({
       nodeEnv: process.env.NODE_ENV,
-      defaultClientId: process.env.DEFAULT_CLIENT_ID,
       port: process.env.PORT,
       githubWebhookPort: process.env.GITHUB_WEBHOOK_PORT,
       databaseUrl: process.env.DATABASE_URL,
@@ -78,7 +76,6 @@ function loadConfig(): Config {
       twitterBearerToken: process.env.TWITTER_BEARER_TOKEN,
       twitterClientId: process.env.TWITTER_CLIENT_ID,
       twitterClientSecret: process.env.TWITTER_CLIENT_SECRET,
-      twitterTrackedAccounts: process.env.TWITTER_TRACKED_ACCOUNTS,
       twitterPollIntervalMs: process.env.TWITTER_POLL_INTERVAL_MS,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,

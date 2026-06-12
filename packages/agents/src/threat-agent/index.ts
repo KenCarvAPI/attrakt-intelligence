@@ -5,9 +5,7 @@
 
 import cron from 'node-cron';
 import { Anthropic } from '@anthropic-ai/sdk';
-import { prisma, config, log } from '@attrakt/core';
-import { addJob } from '@attrakt/api';
-import type { AgentThreatScanJobData } from '@attrakt/api/src/queues/types';
+import { prisma, config, log, getMessagesForThreatScan, getActiveClients } from '@attrakt/core';
 
 if (!config.anthropicApiKey) {
   throw new Error('ANTHROPIC_API_KEY is required');
@@ -19,27 +17,8 @@ const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
  * Scan for threats in recent messages
  */
 async function scanForThreats(clientId: string, platform?: 'DISCORD' | 'GITHUB' | 'TWITTER') {
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-
-  // Fetch recent messages
-  const messages = await prisma.message.findMany({
-    where: {
-      clientId,
-      ...(platform && { platform }),
-      createdAt: { gte: fifteenMinutesAgo },
-    },
-    include: {
-      member: {
-        include: {
-          platformIdentities: true,
-        },
-      },
-    },
-    take: 100,
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  // Fetch recent messages, tenant-scoped, via the shared core query.
+  const messages = await getMessagesForThreatScan(clientId, platform);
 
   if (messages.length === 0) {
     return;
@@ -277,14 +256,15 @@ async function processThreatScanJob(clientId: string, platform?: 'DISCORD' | 'GI
 // Schedule threat scans every 15 minutes
 log.info({}, 'Threat Detection Agent starting');
 
-const clientId = config.defaultClientId;
-
-// Run every 15 minutes
+// Run every 15 minutes for every active client
 cron.schedule('*/15 * * * *', async () => {
-  log.info({ clientId }, 'Running threat scan');
-  await scanForThreats(clientId).catch((error) => {
-    log.error({ error, clientId }, 'Failed to scan for threats');
-  });
+  const clients = await getActiveClients();
+  log.info({ clientCount: clients.length }, 'Running threat scans for active clients');
+  for (const client of clients) {
+    await scanForThreats(client.id).catch((error) => {
+      log.error({ error, clientId: client.id }, 'Failed to scan for threats');
+    });
+  }
 });
 
 // Export for use in worker

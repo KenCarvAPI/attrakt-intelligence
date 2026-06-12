@@ -9,10 +9,13 @@
     "dev": "tsc --watch",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "client:create": "tsx scripts/create-client.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0",
@@ -24,6 +27,7 @@
     "@types/node": "^20.11.0",
     "prisma": "^5.9.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
   }
 }

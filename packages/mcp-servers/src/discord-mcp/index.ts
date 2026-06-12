@@ -9,7 +9,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { prisma, config, log } from '@attrakt/core';
+import { searchDiscordMessages, resolveClientIdForPlatform, config, log } from '@attrakt/core';
 
 // Discord client for MCP server (separate instance from bot)
 // MCP servers run as separate processes, so they need their own client instance
@@ -254,65 +254,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'discord_search_messages': {
         const guildId = args.guildId as string;
-        const query = args.query as string;
-        const authorId = args.authorId as string | undefined;
-        const channelId = args.channelId as string | undefined;
-        const limit = Math.min((args.limit as number) || 25, 100);
 
-        // Search in database for messages matching query
-        const messages = await prisma.message.findMany({
-          where: {
-            platform: 'DISCORD',
-            content: {
-              contains: query,
-              mode: 'insensitive',
-            },
-            ...(authorId && {
-              member: {
-                platformIdentities: {
-                  some: {
-                    platform: 'DISCORD',
-                    platformUserId: authorId,
-                  },
-                },
-              },
-            }),
-            ...(channelId && { channelId }),
-          },
-          take: limit,
-          orderBy: {
-            createdAt: 'desc',
-          },
-          include: {
-            member: {
-              include: {
-                platformIdentities: {
-                  where: {
-                    platform: 'DISCORD',
-                  },
-                },
-              },
-            },
-          },
+        // Resolve the owning client from the guild so the DB search is tenant
+        // scoped — a guild that isn't configured for any client returns nothing.
+        const clientId = await resolveClientIdForPlatform('DISCORD', guildId);
+        if (!clientId) {
+          throw new Error(`No client configured for Discord guild ${guildId}`);
+        }
+
+        const messages = await searchDiscordMessages(clientId, {
+          query: args.query as string,
+          authorId: args.authorId as string | undefined,
+          channelId: args.channelId as string | undefined,
+          limit: args.limit as number | undefined,
         });
 
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                messages.map((msg) => ({
-                  id: msg.id,
-                  content: msg.content,
-                  channelId: msg.channelId,
-                  createdAt: msg.createdAt.toISOString(),
-                  author: msg.member?.platformIdentities[0]?.username,
-                })),
-                null,
-                2
-              ),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(messages, null, 2) }],
         };
       }
 

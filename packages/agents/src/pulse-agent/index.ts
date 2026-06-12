@@ -5,9 +5,7 @@
 
 import cron from 'node-cron';
 import { Anthropic } from '@anthropic-ai/sdk';
-import { prisma, config, log } from '@attrakt/core';
-import { addJob } from '@attrakt/api';
-import type { AgentPulseJobData } from '@attrakt/api/src/queues/types';
+import { prisma, config, log, gatherDigestData, getActiveClients } from '@attrakt/core';
 
 if (!config.anthropicApiKey) {
   throw new Error('ANTHROPIC_API_KEY is required');
@@ -19,105 +17,11 @@ const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
  * Generate daily digest for a client
  */
 async function generateDailyDigest(clientId: string, date: Date = new Date()) {
-  const yesterday = new Date(date);
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-
-  const today = new Date(date);
-  today.setHours(0, 0, 0, 0);
-
-  // Fetch metrics
-  const metrics = await prisma.metric.findMany({
-    where: {
-      clientId,
-      metricType: {
-        in: ['DAU', 'MESSAGE_VOLUME', 'SENTIMENT_AVERAGE', 'GROWTH_RATE', 'MEMBER_COUNT'],
-      },
-      createdAt: {
-        gte: yesterday,
-        lt: today,
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 100,
-  });
-
-  // Get previous day's metrics for comparison
-  const dayBefore = new Date(yesterday);
-  dayBefore.setDate(dayBefore.getDate() - 1);
-
-  const previousMetrics = await prisma.metric.findMany({
-    where: {
-      clientId,
-      metricType: {
-        in: ['DAU', 'MESSAGE_VOLUME', 'SENTIMENT_AVERAGE'],
-      },
-      createdAt: {
-        gte: dayBefore,
-        lt: yesterday,
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 50,
-  });
-
-  // Get top contributors
-  const topContributors = await prisma.member.findMany({
-    where: {
-      clientId,
-      messages: {
-        some: {
-          createdAt: { gte: yesterday },
-        },
-      },
-    },
-    include: {
-      _count: {
-        select: {
-          messages: {
-            where: {
-              createdAt: { gte: yesterday },
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      messages: {
-        _count: 'desc',
-      },
-    },
-    take: 10,
-  });
-
-  // Get recent messages for highlights
-  const recentMessages = await prisma.message.findMany({
-    where: {
-      clientId,
-      createdAt: { gte: yesterday },
-    },
-    include: {
-      member: {
-        select: {
-          displayName: true,
-          platformIdentities: {
-            select: {
-              username: true,
-              platform: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 20,
-  });
+  // Fetch all digest source data, tenant-scoped, via the shared core query.
+  const { metrics, previousMetrics, topContributors, recentMessages, date: yesterday } = await gatherDigestData(
+    clientId,
+    date
+  );
 
   // Detect anomalies
   const anomalies = detectAnomalies(metrics, previousMetrics);
@@ -335,14 +239,15 @@ async function deliverDigest(clientId: string, digest: string) {
 // Schedule daily digest at 9am UTC
 log.info({}, 'Community Pulse Agent starting');
 
-const clientId = config.defaultClientId;
-
-// Run daily at 9am UTC
+// Run daily at 9am UTC for every active client
 cron.schedule('0 9 * * *', async () => {
-  log.info({ clientId }, 'Generating daily digest');
-  await generateDailyDigest(clientId).catch((error) => {
-    log.error({ error, clientId }, 'Failed to generate daily digest');
-  });
+  const clients = await getActiveClients();
+  log.info({ clientCount: clients.length }, 'Generating daily digests for active clients');
+  for (const client of clients) {
+    await generateDailyDigest(client.id).catch((error) => {
+      log.error({ error, clientId: client.id }, 'Failed to generate daily digest');
+    });
+  }
 });
 
 // Also support manual trigger via job queue

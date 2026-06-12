@@ -8,7 +8,15 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { prisma } from '@attrakt/core';
+import {
+  getMemberProfile,
+  getMetrics,
+  getTopContributors,
+  getSentiment,
+  queryEvents,
+  getGrowth,
+  getRecentMetrics,
+} from '@attrakt/core';
 
 const server = new Server(
   {
@@ -29,13 +37,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'analytics_get_member',
-        description: 'Get unified member profile across all platforms',
+        description: 'Get unified member profile across all platforms (scoped to a client)',
         inputSchema: {
           type: 'object',
           properties: {
+            clientId: { type: 'string', description: 'Client ID' },
             memberId: { type: 'string', description: 'Member ID' },
           },
-          required: ['memberId'],
+          required: ['clientId', 'memberId'],
         },
       },
       {
@@ -111,397 +120,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Handle tool calls
+// Handle tool calls. Every tool is scoped by an explicit clientId so the
+// analytics surface can never return another tenant's data.
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  const { name, arguments: args = {} } = request.params;
 
   try {
+    let result: unknown;
+
     switch (name) {
-      case 'analytics_get_member': {
-        const memberId = args.memberId as string;
-
-        const member = await prisma.member.findUnique({
-          where: { id: memberId },
-          include: {
-            platformIdentities: true,
-            _count: {
-              select: {
-                messages: true,
-                events: true,
-              },
-            },
-          },
+      case 'analytics_get_member':
+        result = await getMemberProfile(args.clientId as string, args.memberId as string);
+        break;
+      case 'analytics_get_metrics':
+        result = await getMetrics(args.clientId as string, args.metric as string, args.period as never);
+        break;
+      case 'analytics_get_top_contributors':
+        result = await getTopContributors(
+          args.clientId as string,
+          args.period as never,
+          (args.limit as number) || 10
+        );
+        break;
+      case 'analytics_get_sentiment':
+        result = await getSentiment(args.clientId as string, args.period as never, args.channel as string | undefined);
+        break;
+      case 'analytics_query_events':
+        result = await queryEvents(args.clientId as string, {
+          eventType: args.eventType as string | undefined,
+          platform: args.platform as string | undefined,
+          since: args.since as string | undefined,
+          limit: args.limit as number | undefined,
         });
-
-        if (!member) {
-          throw new Error(`Member ${memberId} not found`);
-        }
-
-        // Get aggregated activity
-        const messages = await prisma.message.groupBy({
-          by: ['platform'],
-          where: { memberId },
-          _count: true,
-        });
-
-        const events = await prisma.event.groupBy({
-          by: ['platform', 'eventType'],
-          where: { memberId },
-          _count: true,
-        });
-
-        // Calculate average sentiment
-        const sentimentMessages = await prisma.message.findMany({
-          where: {
-            memberId,
-            sentiment: { not: null },
-          },
-          select: { sentiment: true },
-        });
-
-        const avgSentiment =
-          sentimentMessages.length > 0
-            ? sentimentMessages.reduce((sum, m) => sum + (m.sentiment || 0), 0) / sentimentMessages.length
-            : null;
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  id: member.id,
-                  displayName: member.displayName,
-                  email: member.email,
-                  platformIdentities: member.platformIdentities.map((pi) => ({
-                    platform: pi.platform,
-                    username: pi.username,
-                    displayName: pi.displayName,
-                  })),
-                  stats: {
-                    totalMessages: member._count.messages,
-                    totalEvents: member._count.events,
-                    messagesByPlatform: messages.reduce(
-                      (acc, m) => ({ ...acc, [m.platform]: m._count }),
-                      {} as Record<string, number>
-                    ),
-                    eventsByPlatform: events.reduce(
-                      (acc, e) => ({
-                        ...acc,
-                        [e.platform]: {
-                          ...(acc[e.platform] || {}),
-                          [e.eventType]: e._count,
-                        },
-                      }),
-                      {} as Record<string, Record<string, number>>
-                    ),
-                    averageSentiment: avgSentiment,
-                  },
-                  firstSeen: member.firstSeen,
-                  lastSeen: member.lastSeen,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      case 'analytics_get_metrics': {
-        const clientId = args.clientId as string;
-        const metric = args.metric as string;
-        const period = (args.period as string) || 'day';
-
-        const since = new Date();
-        switch (period) {
-          case 'hour':
-            since.setHours(since.getHours() - 24);
-            break;
-          case 'day':
-            since.setDate(since.getDate() - 30);
-            break;
-          case 'week':
-            since.setDate(since.getDate() - 12 * 7);
-            break;
-          case 'month':
-            since.setMonth(since.getMonth() - 12);
-            break;
-        }
-
-        const metrics = await prisma.metric.findMany({
-          where: {
-            clientId,
-            metricType: metric as any,
-            createdAt: { gte: since },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                metrics.map((m) => ({
-                  value: m.value,
-                  timestamp: m.createdAt.toISOString(),
-                  metadata: m.metadata,
-                })),
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      case 'analytics_get_top_contributors': {
-        const clientId = args.clientId as string;
-        const period = (args.period as string) || 'week';
-        const limit = Math.min((args.limit as number) || 10, 100);
-
-        const since = new Date();
-        switch (period) {
-          case 'day':
-            since.setDate(since.getDate() - 1);
-            break;
-          case 'week':
-            since.setDate(since.getDate() - 7);
-            break;
-          case 'month':
-            since.setMonth(since.getMonth() - 1);
-            break;
-        }
-
-        const contributors = await prisma.member.findMany({
-          where: {
-            clientId,
-            messages: {
-              some: {
-                createdAt: { gte: since },
-              },
-            },
-          },
-          include: {
-            _count: {
-              select: {
-                messages: {
-                  where: {
-                    createdAt: { gte: since },
-                  },
-                },
-                events: {
-                  where: {
-                    createdAt: { gte: since },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: {
-            messages: {
-              _count: 'desc',
-            },
-          },
-          take: limit,
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                contributors.map((c) => ({
-                  id: c.id,
-                  displayName: c.displayName,
-                  messageCount: c._count.messages,
-                  eventCount: c._count.events,
-                })),
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      case 'analytics_get_sentiment': {
-        const clientId = args.clientId as string;
-        const period = (args.period as string) || 'week';
-        const channel = args.channel as string | undefined;
-
-        const since = new Date();
-        switch (period) {
-          case 'day':
-            since.setDate(since.getDate() - 1);
-            break;
-          case 'week':
-            since.setDate(since.getDate() - 7);
-            break;
-          case 'month':
-            since.setMonth(since.getMonth() - 1);
-            break;
-        }
-
-        const messages = await prisma.message.findMany({
-          where: {
-            clientId,
-            platform: channel as any,
-            sentiment: { not: null },
-            createdAt: { gte: since },
-          },
-          select: {
-            sentiment: true,
-            createdAt: true,
-            platform: true,
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        });
-
-        // Group by day and calculate averages
-        const dailySentiment = messages.reduce((acc, msg) => {
-          const day = msg.createdAt.toISOString().split('T')[0];
-          if (!acc[day]) {
-            acc[day] = { sum: 0, count: 0 };
-          }
-          acc[day].sum += msg.sentiment || 0;
-          acc[day].count += 1;
-          return acc;
-        }, {} as Record<string, { sum: number; count: number }>);
-
-        const result = Object.entries(dailySentiment).map(([day, data]) => ({
-          date: day,
-          averageSentiment: data.sum / data.count,
-          messageCount: data.count,
-        }));
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case 'analytics_query_events': {
-        const clientId = args.clientId as string;
-        const eventType = args.eventType as string | undefined;
-        const platform = args.platform as string | undefined;
-        const since = args.since ? new Date(args.since as string) : undefined;
-        const limit = Math.min((args.limit as number) || 100, 1000);
-
-        const events = await prisma.event.findMany({
-          where: {
-            clientId,
-            ...(eventType && { eventType: eventType as any }),
-            ...(platform && { platform: platform as any }),
-            ...(since && { createdAt: { gte: since } }),
-          },
-          take: limit,
-          orderBy: {
-            createdAt: 'desc',
-          },
-          include: {
-            member: {
-              select: {
-                id: true,
-                displayName: true,
-              },
-            },
-          },
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                events.map((e) => ({
-                  id: e.id,
-                  eventType: e.eventType,
-                  platform: e.platform,
-                  member: e.member ? { id: e.member.id, displayName: e.member.displayName } : null,
-                  eventData: e.eventData,
-                  createdAt: e.createdAt.toISOString(),
-                })),
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
-      case 'analytics_get_growth': {
-        const clientId = args.clientId as string;
-        const period = (args.period as string) || 'week';
-
-        const since = new Date();
-        switch (period) {
-          case 'day':
-            since.setDate(since.getDate() - 1);
-            break;
-          case 'week':
-            since.setDate(since.getDate() - 7);
-            break;
-          case 'month':
-            since.setMonth(since.getMonth() - 1);
-            break;
-        }
-
-        const joins = await prisma.event.count({
-          where: {
-            clientId,
-            eventType: 'JOIN',
-            createdAt: { gte: since },
-          },
-        });
-
-        const leaves = await prisma.event.count({
-          where: {
-            clientId,
-            eventType: 'LEAVE',
-            createdAt: { gte: since },
-          },
-        });
-
-        const totalMembers = await prisma.member.count({
-          where: {
-            clientId,
-          },
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  period,
-                  joins,
-                  leaves,
-                  netGrowth: joins - leaves,
-                  totalMembers,
-                  growthRate: totalMembers > 0 ? ((joins - leaves) / totalMembers) * 100 : 0,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
+        break;
+      case 'analytics_get_growth':
+        result = await getGrowth(args.clientId as string, args.period as never);
+        break;
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
   } catch (error) {
     return {
       content: [
@@ -539,28 +200,14 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const match = uri.match(/analytics:\/\/client\/([^/]+)\/metrics/);
     if (match) {
       const [, clientId] = match;
-
       try {
-        const metrics = await prisma.metric.findMany({
-          where: { clientId },
-          take: 100,
-          orderBy: { createdAt: 'desc' },
-        });
-
+        const metrics = await getRecentMetrics(clientId);
         return {
           contents: [
             {
               uri,
               mimeType: 'application/json',
-              text: JSON.stringify(
-                metrics.map((m) => ({
-                  type: m.metricType,
-                  value: m.value,
-                  timestamp: m.createdAt.toISOString(),
-                })),
-                null,
-                2
-              ),
+              text: JSON.stringify(metrics, null, 2),
             },
           ],
         };

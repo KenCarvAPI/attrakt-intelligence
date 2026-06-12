@@ -2,6 +2,8 @@ export * from './prisma';
 export * from './types';
 export * from './utils';
 export * from './services/identity-resolution';
+export * from './services/tenant';
+export * from './queries';
 export * from './config';
 export * from './logger';
 export * from './errors';

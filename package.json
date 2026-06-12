@@ -9,6 +9,8 @@
     "lint": "pnpm --filter './packages/*' --filter './apps/*' lint",
     "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
     "test": "pnpm --filter './packages/*' --filter './apps/*' test",
+    "test:multi-tenancy": "pnpm --filter @attrakt/core test",
+    "client:create": "pnpm --filter @attrakt/core client:create",
     "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
   },
   "devDependencies": {

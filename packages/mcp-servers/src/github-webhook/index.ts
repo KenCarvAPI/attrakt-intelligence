@@ -1,5 +1,5 @@
 import express from 'express';
-import { addJob, config, log } from '@attrakt/core';
+import { addJob, resolveClientIdForPlatform, config, log } from '@attrakt/core';
 import type { JobData } from '@attrakt/api/src/queues/types';
 
 const app = express();
@@ -15,9 +15,13 @@ app.post('/webhooks/github', async (req, res) => {
   const payload = req.body;
 
   try {
-    // Extract client ID from repository or organization
-    // In MVP, we'll use a simple mapping
-    const clientId = config.defaultClientId;
+    // Route to the owning client via the repo owner / organization login.
+    const org = payload?.organization?.login || payload?.repository?.owner?.login || '';
+    const clientId = await resolveClientIdForPlatform('GITHUB', org);
+    if (!clientId) {
+      log.debug({ org, delivery }, 'No client configured for GitHub org; ignoring event');
+      return res.status(202).json({ received: true, ignored: 'unconfigured_org' });
+    }
 
     // Map GitHub events to our event types
     const eventMap: Record<string, string> = {
