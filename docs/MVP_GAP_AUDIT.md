@@ -15,7 +15,7 @@ shipped · **STUB** = scaffolding only, does not do the job on a schedule/real d
 | # | Subsystem | Verdict | One-line reason | Key files |
 |---|-----------|---------|-----------------|-----------|
 | 1 | Discord ingestion (persist Messages + Events) | **WORKS** ✅ (fixed 2026-06-12) | Added `discord-bot` + `discord-worker` launch scripts; fixed three runtime blockers that prevented any worker from running (see note A). Verified end-to-end against live Postgres: a test message persists a `Message` row + `MENTION`/`LINK_CLICK` `Event` rows + `Member`/`PlatformIdentity`. | `packages/mcp-servers/src/discord-bot/index.ts`, `discord-bot/worker.ts`, `discord-bot/index-worker.ts`, `packages/mcp-servers/package.json` |
-| 2 | GitHub ingestion (persist activity) | **WORKS** (events only) | Webhook receiver + worker both have launch scripts and persist `Event` rows; caveat: **no webhook signature verification**, and GitHub creates no `Message` rows (by design) | `packages/mcp-servers/src/github-webhook/index.ts`, `github-bot/worker.ts`, `github-bot/index-worker.ts` |
+| 2 | GitHub ingestion (persist activity) | **WORKS** ✅ (hardened 2026-06-12) | Webhook receiver + worker persist `Event` rows; now **enforces `X-Hub-Signature-256` HMAC verification** (`GITHUB_WEBHOOK_SECRET`) — unsigned/invalid payloads get 401. (Note A's `log.child` crash also applied here pre-fix.) GitHub still creates no `Message` rows (by design). | `packages/mcp-servers/src/github-webhook/index.ts`, `github-webhook/verify.ts`, `github-webhook/verify.test.ts`, `github-bot/worker.ts` |
 | 3 | Identity resolution (merge identities into Members) | **PARTIAL** | Links new `PlatformIdentity` rows to a `Member` via 5 strategies and creates new members; **does not merge two already-distinct Member records**, and cross-platform linking leans almost entirely on username | `packages/core/src/services/identity-resolution.ts` |
 | 4 | pulse-agent (real digest from real data) | **PARTIAL** | Produces a real markdown digest from live DB rows via Claude (with template fallback) and delivers it; but the **metrics section is empty (N/A)** because nothing populates the `Metric` table (see #5) | `packages/agents/src/pulse-agent/index.ts` |
 | 5 | Metric model + scheduled writes (TimescaleDB deferred) | **WORKS** ✅ (fixed 2026-06-12) | API startup now calls `scheduleMetricsComputation()` + `createMetricsWorker()`; computation extracted to `computeMetrics()` and exposed via `pnpm --filter @attrakt/api metrics:compute`. Verified: a manual run wrote 11 `Metric` rows with real values against plain Postgres. TimescaleDB **explicitly deferred** for MVP (tables work as plain Postgres). | `packages/api/src/server.ts`, `queues/scheduler.ts`, `queues/metrics-worker.ts`, `queues/metrics-cli.ts`, `packages/core/prisma/migrations/0_enable_timescaledb.sql` |
@@ -87,10 +87,16 @@ _Original finding (pre-fix):_
   resolves identity and writes `Event` rows for each case (commits → `PUSH`,
   PR open/merge/close, issues, comments, stars, forks). This persists real
   activity end-to-end.
-- Caveats: (a) **no `x-hub-signature` / webhook-secret verification** — the
-  endpoint trusts any POST; (b) GitHub ingestion writes **`Event` rows only, no
-  `Message` rows**, so GitHub content never reaches the messages hypertable or
-  sentiment metrics; (c) `clientId` is hardcoded to `config.defaultClientId`.
+- Caveats: (a) ~~**no `x-hub-signature` / webhook-secret verification**~~ —
+  **FIXED 2026-06-12**: the endpoint now captures the raw body and verifies the
+  `X-Hub-Signature-256` HMAC against `GITHUB_WEBHOOK_SECRET` via a pure
+  `verifyGithubSignature()` helper, rejecting missing/invalid signatures with
+  401 (constant-time compare). Covered by `verify.test.ts` (valid / wrong-secret
+  / tampered / missing / malformed; `pnpm --filter @attrakt/mcp-servers test`)
+  and confirmed live (no-sig → 401, bad-sig → 401, valid-sig → accepted).
+  (b) GitHub ingestion writes **`Event` rows only, no `Message` rows**, so GitHub
+  content never reaches sentiment metrics; (c) `clientId` is hardcoded to
+  `config.defaultClientId`. (b) and (c) are unchanged / out of scope.
 
 ### 3. Identity resolution — PARTIAL
 

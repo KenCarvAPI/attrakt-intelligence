@@ -1,17 +1,38 @@
 import express from 'express';
 import { addJob, config, log } from '@attrakt/core';
 import type { JobData } from '@attrakt/api/src/queues/types';
+import { verifyGithubSignature } from './verify';
 
 const app = express();
 const PORT = config.githubWebhookPort;
 
-// Middleware to parse JSON
-app.use(express.json());
+// Parse JSON while retaining the raw body bytes for HMAC signature verification.
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 
 // Webhook endpoint
 app.post('/webhooks/github', async (req, res) => {
   const event = req.headers['x-github-event'] as string;
   const delivery = req.headers['x-github-delivery'] as string;
+  const signature = req.headers['x-hub-signature-256'] as string | undefined;
+  const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody ?? Buffer.from('');
+
+  // Reject anything that isn't signed with our shared secret.
+  if (!config.githubWebhookSecret) {
+    log.error({ delivery }, 'GITHUB_WEBHOOK_SECRET is not configured; rejecting webhook');
+    return res.status(401).json({ error: 'Webhook secret not configured' });
+  }
+
+  if (!verifyGithubSignature(rawBody, signature, config.githubWebhookSecret)) {
+    log.warn({ event, delivery }, 'Rejected GitHub webhook: missing or invalid signature');
+    return res.status(401).json({ error: 'Invalid or missing signature' });
+  }
+
   const payload = req.body;
 
   try {

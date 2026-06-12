@@ -8,6 +8,7 @@
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "discord-mcp": "tsx src/discord-mcp/index.ts",
     "discord-bot": "tsx src/discord-bot/index.ts",
     "discord-worker": "tsx src/discord-bot/index-worker.ts",
