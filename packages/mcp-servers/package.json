@@ -9,6 +9,8 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "discord-mcp": "tsx src/discord-mcp/index.ts",
+    "discord-bot": "tsx src/discord-bot/index.ts",
+    "discord-worker": "tsx src/discord-bot/index-worker.ts",
     "github-mcp": "tsx src/github-mcp/index.ts",
     "github-webhook": "tsx src/github-webhook/index.ts",
     "github-worker": "tsx src/github-bot/index-worker.ts",

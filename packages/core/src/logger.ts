@@ -35,6 +35,8 @@ export const log = {
   debug: (obj: Record<string, unknown>, msg?: string) => logger.debug(obj, msg),
   fatal: (obj: Record<string, unknown>, msg?: string) => logger.fatal(obj, msg),
   trace: (obj: Record<string, unknown>, msg?: string) => logger.trace(obj, msg),
+  // Contextual child logger — workers call log.child({...}) per event.
+  child: (context: Record<string, unknown>) => logger.child(context),
 };
 
 // Child logger factory for contextual logging

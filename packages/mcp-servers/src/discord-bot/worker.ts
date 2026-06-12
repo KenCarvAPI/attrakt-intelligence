@@ -65,7 +65,7 @@ export function createDiscordWorker() {
   });
 }
 
-async function processMessage(payload: DiscordMessagePayload, clientId: string) {
+export async function processMessage(payload: DiscordMessagePayload, clientId: string) {
   const logger = log.child({ clientId, platform: 'DISCORD', event: 'messageCreate' });
 
   try {
@@ -157,7 +157,7 @@ async function processMessage(payload: DiscordMessagePayload, clientId: string) 
   }
 }
 
-async function processMemberJoin(payload: DiscordMemberPayload, clientId: string) {
+export async function processMemberJoin(payload: DiscordMemberPayload, clientId: string) {
   const logger = log.child({ clientId, platform: 'DISCORD', event: 'guildMemberAdd' });
 
   try {
@@ -205,7 +205,7 @@ async function processMemberJoin(payload: DiscordMemberPayload, clientId: string
   }
 }
 
-async function processMemberLeave(payload: DiscordMemberPayload, clientId: string) {
+export async function processMemberLeave(payload: DiscordMemberPayload, clientId: string) {
   const logger = log.child({ clientId, platform: 'DISCORD', event: 'guildMemberRemove' });
 
   try {
@@ -250,7 +250,7 @@ async function processMemberLeave(payload: DiscordMemberPayload, clientId: strin
   }
 }
 
-async function processReaction(payload: DiscordReactionPayload, clientId: string) {
+export async function processReaction(payload: DiscordReactionPayload, clientId: string) {
   const logger = log.child({ clientId, platform: 'DISCORD', event: 'messageReactionAdd' });
 
   try {
