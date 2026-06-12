@@ -22,14 +22,17 @@ model Client {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  members          Member[]
-  platformConfigs  PlatformConfig[]
-  metrics          Metric[]
-  threats          Threat[]
-  advocateScores   AdvocateScore[]
-  scoringConfig    ScoringConfig?
-  advocateBriefs   AdvocateBrief[]
+  members                Member[]
+  platformConfigs        PlatformConfig[]
+  metrics                Metric[]
+  threats                Threat[]
+  advocateScores         AdvocateScore[]
+  scoringConfig          ScoringConfig?
+  advocateBriefs         AdvocateBrief[]
   helpfulnessEvaluations HelpfulnessEvaluation[]
+  knowledgeDocuments     KnowledgeDocument[]
+  contextProfiles        ContextProfile[]
+  campaignBriefs         CampaignBrief[]
 
   @@map("clients")
 }
@@ -360,4 +363,92 @@ model AdvocateBrief {
   @@index([memberId, createdAt])
   @@index([clientId, createdAt])
   @@map("advocate_briefs")
+}
+
+// ============================================================================
+// Internal Knowledge Layer
+//
+// Captures what a client's products do, how their brand exists, what their
+// marketing function looks like, and strategic direction from leadership.
+// Sits alongside the community ingestion pipelines. MVP intake is upload and
+// paste only (no Notion/Drive/Slack connectors yet).
+// ============================================================================
+
+model KnowledgeDocument {
+  id          String              @id @default(cuid())
+  clientId    String
+  title       String
+  sourceType  KnowledgeSourceType
+  rawText     String
+  charCount   Int                 @default(0) // length of stored rawText
+  contentHash String              // sha256 of original text, used for dedupe
+  truncated   Boolean             @default(false)
+  uploadedAt  DateTime            @default(now())
+  metadata    Json?               @default("{}")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Dedupe identical content per client
+  @@unique([clientId, contentHash])
+  @@index([clientId, sourceType])
+  @@map("knowledge_documents")
+}
+
+enum KnowledgeSourceType {
+  product_docs
+  brand_guidelines
+  marketing_material
+  leadership_interview
+  strategy_doc
+  website
+  other
+}
+
+model ContextProfile {
+  id       String               @id @default(cuid())
+  clientId String
+  version  Int                  @default(1)
+  status   ContextProfileStatus @default(draft)
+
+  // Structured sections stored as JSON. Populated by synthesis (next prompt).
+  products           Json @default("{}") // what they are, who they serve, key differentiators
+  brandVoice         Json @default("{}") // tone, vocabulary, things they never say
+  audience           Json @default("{}") // ICPs, communities, where they live online
+  marketingFunction  Json @default("{}") // team shape, channels in use, current campaigns
+  strategicDirection Json @default("{}") // leadership priorities, positioning, upcoming bets
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // One profile per (client, version). A partial unique index enforcing a
+  // single ACTIVE profile per client is added in the migration (Prisma cannot
+  // express partial unique indexes in the schema).
+  @@unique([clientId, version])
+  @@index([clientId, status])
+  @@map("context_profiles")
+}
+
+enum ContextProfileStatus {
+  draft
+  active
+  archived
+}
+
+// Campaign brief — bridges the internal knowledge layer (ContextProfile) and
+// the community intelligence pillar (advocates / channels from ingestion data).
+model CampaignBrief {
+  id        String   @id @default(cuid())
+  clientId  String
+  objective String
+  content   Json     @default("{}") // structured brief (segments, advocates, channels, angles)
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("campaign_briefs")
 }

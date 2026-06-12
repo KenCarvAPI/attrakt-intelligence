@@ -8,3 +8,5 @@ export * from './scoring-agent/helpfulness';
 export * from './scoring-agent/briefs';
 export * from './scoring-agent/brief-worker';
 export * from './prompts';
+export * from './context-agent';
+export * from './campaign-agent';

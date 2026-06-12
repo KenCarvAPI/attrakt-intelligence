@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@attrakt/core": "workspace:*",
+    "@attrakt/agents": "workspace:*",
     "@bull-board/api": "^5.15.0",
     "@bull-board/express": "^5.15.0",
     "bullmq": "^5.4.0",

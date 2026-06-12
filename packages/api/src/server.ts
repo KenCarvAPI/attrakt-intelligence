@@ -9,12 +9,18 @@ import { addJob } from './queues/workers';
 import { performHealthCheck } from './health';
 import { scheduleMetricsComputation } from './queues/scheduler';
 import { createMetricsWorker } from './queues/metrics-worker';
+import { knowledgeRouter } from './routes/knowledge';
+import { campaignRouter } from './routes/campaign';
 import { config, log, prisma } from '@attrakt/core';
 
 const app = express();
 const PORT = config.port;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Knowledge intake (paste path) + campaign brief generation
+app.use('/api', knowledgeRouter);
+app.use('/api', campaignRouter);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

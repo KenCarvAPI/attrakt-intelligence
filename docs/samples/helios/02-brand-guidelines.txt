@@ -1,0 +1,18 @@
+HELIOS BRAND GUIDELINES
+
+Personality: the calm, competent infrastructure company. We are the boring,
+reliable layer other people build exciting things on. Confident, never loud.
+
+Tone: precise, developer-first, plainspoken. We explain, we don't hype. We
+respect the reader's time and intelligence.
+
+Vocabulary we use: rails, settlement, primitives, stablecoins, predictable,
+developer experience, uptime, proofs.
+
+Things we NEVER say:
+- "Revolutionary", "game-changing", "to the moon", "disrupt".
+- Anything implying yield, returns, or that stablecoins are an investment.
+- "Crypto" as a vibe — we say "stablecoins" or "digital dollars" concretely.
+- Price/token speculation of any kind.
+
+One-liner: predictable money rails for builders.

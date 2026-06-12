@@ -5,7 +5,14 @@
 
 import cron from 'node-cron';
 import { Anthropic } from '@anthropic-ai/sdk';
-import { prisma, config, log } from '@attrakt/core';
+import {
+  prisma,
+  config,
+  log,
+  CLAUDE_MODEL,
+  loadActiveContextProfile,
+  formatContextForPrompt,
+} from '@attrakt/core';
 import { addJob } from '@attrakt/api';
 import type { AgentPulseJobData } from '@attrakt/api/src/queues/types';
 
@@ -122,6 +129,9 @@ async function generateDailyDigest(clientId: string, date: Date = new Date()) {
   // Detect anomalies
   const anomalies = detectAnomalies(metrics, previousMetrics);
 
+  // Load the client's active context profile for grounding (may be null)
+  const contextProfile = await loadActiveContextProfile(clientId);
+
   // Generate digest using Claude
   const digest = await generateDigestWithClaude({
     metrics,
@@ -130,6 +140,7 @@ async function generateDailyDigest(clientId: string, date: Date = new Date()) {
     recentMessages,
     anomalies,
     date: yesterday,
+    contextProfile,
   });
 
   // Store digest
@@ -208,7 +219,18 @@ function detectAnomalies(
  * Generate digest using Claude
  */
 async function generateDigestWithClaude(context: any): Promise<string> {
-  const prompt = `Generate a daily community digest for ${context.date.toLocaleDateString()}. 
+  const contextGrounding = formatContextForPrompt(context.contextProfile ?? null);
+
+  const prompt = `${contextGrounding}
+
+You are writing the daily community digest for this specific client. Ground the
+"Trending Topics" and "Suggested Actions" in the client's actual products,
+audience, and strategic priorities above — not generic community-management
+advice. If the client context says you are running without a profile, write the
+digest normally but add a short note that recommendations are not grounded in
+client context.
+
+Generate a daily community digest for ${context.date.toLocaleDateString()}.
 
 Key Metrics (vs previous day):
 - DAU: ${getLatestMetric(context.metrics, 'DAU')?.value || 'N/A'}
@@ -242,7 +264,7 @@ Keep it data-driven, professional, and actionable.`;
 
   try {
     const message = await anthropic.messages.create({
-      model: config.claudeModel,
+      model: CLAUDE_MODEL,
       max_tokens: 2000,
       messages: [
         {
