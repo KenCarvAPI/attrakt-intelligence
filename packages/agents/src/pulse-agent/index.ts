@@ -8,6 +8,7 @@ import { Anthropic } from '@anthropic-ai/sdk';
 import { prisma, config, log } from '@attrakt/core';
 import { addJob } from '@attrakt/api';
 import type { AgentPulseJobData } from '@attrakt/api/src/queues/types';
+import { generateWeeklyReport } from './weekly-report';
 
 if (!config.anthropicApiKey) {
   throw new Error('ANTHROPIC_API_KEY is required');
@@ -345,6 +346,18 @@ cron.schedule('0 9 * * *', async () => {
   });
 });
 
+// Generate the weekly ecosystem health report every Monday at 9am UTC, for
+// every client in the system.
+cron.schedule('0 9 * * 1', async () => {
+  const clients = await prisma.client.findMany({ select: { id: true, slug: true } });
+  log.info({ count: clients.length }, 'Generating weekly health reports');
+  for (const c of clients) {
+    await generateWeeklyReport(c.id).catch((error) => {
+      log.error({ error, clientId: c.id, slug: c.slug }, 'Failed to generate weekly report');
+    });
+  }
+});
+
 // Also support manual trigger via job queue
 async function processPulseJob(clientId: string, date?: string) {
   const digestDate = date ? new Date(date) : new Date();
@@ -352,7 +365,7 @@ async function processPulseJob(clientId: string, date?: string) {
 }
 
 // Export for use in worker
-export { processPulseJob, generateDailyDigest };
+export { processPulseJob, generateDailyDigest, generateWeeklyReport };
 
 // Keep process alive
 log.info({ schedule: 'daily at 9am UTC' }, 'Community Pulse Agent scheduled');

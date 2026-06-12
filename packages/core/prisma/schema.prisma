@@ -26,8 +26,56 @@ model Client {
   platformConfigs  PlatformConfig[]
   metrics          Metric[]
   threats          Threat[]
+  contextProfile   ContextProfile?
+  reports          Report[]
 
   @@map("clients")
+}
+
+/// Strategic context for a client, used to ground generated reports in the
+/// client's mission and priorities.
+model ContextProfile {
+  id                  String   @id @default(cuid())
+  clientId            String   @unique
+  mission             String?
+  // Ordered list of the client's strategic priorities (most important first).
+  strategicPriorities String[] @default([])
+  audience            String?
+  tone                String?
+  notes               String?
+  metadata            Json?    @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("context_profiles")
+}
+
+/// A generated report (e.g. the weekly ecosystem health report), stored as
+/// structured JSON alongside its rendered Markdown / HTML.
+model Report {
+  id          String     @id @default(cuid())
+  clientId    String
+  type        ReportType @default(WEEKLY_HEALTH)
+  // Prompt template version used to generate this report (e.g. "v1").
+  version     String
+  periodStart DateTime
+  periodEnd   DateTime
+  data        Json       // Structured report payload
+  markdown    String     // Rendered Markdown
+  html        String?    // Rendered HTML (email)
+  createdAt   DateTime   @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, type, createdAt])
+  @@map("reports")
+}
+
+enum ReportType {
+  WEEKLY_HEALTH
+  DAILY_DIGEST
 }
 
 model PlatformConfig {

@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "pulse-agent": "tsx src/pulse-agent/index.ts",
-    "threat-agent": "tsx src/threat-agent/index.ts"
+    "threat-agent": "tsx src/threat-agent/index.ts",
+    "digest:run": "tsx src/pulse-agent/cli.ts"
   },
   "dependencies": {
     "@attrakt/core": "workspace:*",
