@@ -28,6 +28,7 @@ model Client {
   threats            Threat[]
   knowledgeDocuments KnowledgeDocument[]
   contextProfiles    ContextProfile[]
+  campaignBriefs     CampaignBrief[]
 
   @@map("clients")
 }
@@ -315,4 +316,19 @@ enum ContextProfileStatus {
   draft
   active
   archived
+}
+
+// Campaign brief — bridges the internal knowledge layer (ContextProfile) and
+// the community intelligence pillar (advocates / channels from ingestion data).
+model CampaignBrief {
+  id        String   @id @default(cuid())
+  clientId  String
+  objective String
+  content   Json     @default("{}") // structured brief (segments, advocates, channels, angles)
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("campaign_briefs")
 }

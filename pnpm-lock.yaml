@@ -103,6 +103,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@attrakt/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@attrakt/core':
         specifier: workspace:*
         version: link:../core
