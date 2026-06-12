@@ -6,10 +6,16 @@ import { Queue } from 'bullmq';
 import { redisConnection } from './queues/connection';
 import { jobTypes } from './queues/types';
 import { performHealthCheck } from './health';
+import { knowledgeRouter } from './routes/knowledge';
 import { config, log } from '@attrakt/core';
 
 const app = express();
 const PORT = config.port;
+
+app.use(express.json({ limit: '10mb' }));
+
+// Knowledge intake (paste path)
+app.use('/api', knowledgeRouter);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
