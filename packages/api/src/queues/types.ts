@@ -6,6 +6,7 @@ export const jobTypes = [
   'ingest:discord',
   'ingest:github',
   'ingest:twitter',
+  'ingest:discourse',
   'compute:metrics',
   'agent:pulse',
   'agent:threat-scan',
@@ -31,6 +32,12 @@ export interface IngestTwitterJobData {
   clientId: string;
 }
 
+export interface IngestDiscourseJobData {
+  event: 'topic_created' | 'post_created' | 'solution_accepted';
+  payload: unknown;
+  clientId: string;
+}
+
 export interface ComputeMetricsJobData {
   clientId: string;
   period: 'hour' | 'day' | 'week';
@@ -50,6 +57,7 @@ export type JobData =
   | IngestDiscordJobData
   | IngestGitHubJobData
   | IngestTwitterJobData
+  | IngestDiscourseJobData
   | ComputeMetricsJobData
   | AgentPulseJobData
   | AgentThreatScanJobData;

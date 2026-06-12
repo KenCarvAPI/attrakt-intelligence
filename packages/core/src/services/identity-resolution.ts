@@ -5,6 +5,7 @@
 
 import { prisma } from '../prisma';
 import { normalizeUsername, normalizeEmail, isFuzzyUsernameMatch } from '../utils/identity';
+import type { DiscourseLinkedAccountRef } from '../types/platforms';
 
 export interface IdentityMatchResult {
   memberId: string;
@@ -17,13 +18,20 @@ export interface IdentityMatchResult {
  */
 export async function resolveIdentity(
   clientId: string,
-  platform: 'DISCORD' | 'GITHUB' | 'TWITTER',
+  platform: 'DISCORD' | 'GITHUB' | 'TWITTER' | 'DISCOURSE',
   platformUserId: string,
   username: string,
   options: {
     email?: string;
     displayName?: string;
     walletAddress?: string;
+    /**
+     * Explicit links to other platforms declared on the source profile
+     * (e.g. a GitHub/Discord account connected to a Discourse profile).
+     * These are treated as high-confidence signals, ranked above username
+     * matching.
+     */
+    linkedAccounts?: DiscourseLinkedAccountRef[];
   } = {}
 ): Promise<IdentityMatchResult> {
   const normalizedUsername = normalizeUsername(username);
@@ -71,6 +79,43 @@ export async function resolveIdentity(
         },
       });
       return { memberId: emailMember.id, matchMethod: 'email', confidence: 1.0 };
+    }
+  }
+
+  // Strategy 2b: Explicit cross-platform link (ranked above username matching).
+  // If the source profile declares a GitHub/Discord account, and that account
+  // already exists as a platform identity for this client, link to that member.
+  for (const linked of options.linkedAccounts ?? []) {
+    const or: Array<Record<string, unknown>> = [];
+    if (linked.platformUserId) {
+      or.push({ platformUserId: linked.platformUserId });
+    }
+    if (linked.username) {
+      or.push({ username: { equals: normalizeUsername(linked.username), mode: 'insensitive' } });
+    }
+    if (or.length === 0) continue;
+
+    const linkedIdentity = await prisma.platformIdentity.findFirst({
+      where: {
+        platform: linked.platform,
+        member: { clientId },
+        OR: or,
+      },
+    });
+
+    if (linkedIdentity) {
+      await prisma.platformIdentity.create({
+        data: {
+          memberId: linkedIdentity.memberId,
+          platform,
+          platformUserId,
+          username,
+          displayName: options.displayName,
+          matchMethod: 'explicit',
+          matchConfidence: 0.95,
+        },
+      });
+      return { memberId: linkedIdentity.memberId, matchMethod: 'explicit', confidence: 0.95 };
     }
   }
 

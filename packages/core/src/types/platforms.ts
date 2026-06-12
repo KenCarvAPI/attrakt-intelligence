@@ -105,3 +105,52 @@ export interface TwitterFollowerCountPayload {
   tweetCount: number;
   timestamp: number;
 }
+
+export interface DiscourseLinkedAccountRef {
+  platform: 'GITHUB' | 'DISCORD';
+  username?: string;
+  platformUserId?: string;
+}
+
+/**
+ * Shared author/category context carried on every Discourse ingest event.
+ */
+export interface DiscourseAuthorContext {
+  authorUserId: string;
+  authorUsername: string;
+  authorDisplayName?: string;
+  /** Explicit GitHub/Discord links declared on the author's Discourse profile. */
+  linkedAccounts?: DiscourseLinkedAccountRef[];
+  categoryId: number | null;
+  categorySlug: string | null;
+  /** True when the post/topic lives in a configured governance category. */
+  governance: boolean;
+}
+
+export interface DiscourseTopicCreatedPayload extends DiscourseAuthorContext {
+  topicId: string;
+  title: string;
+  slug: string;
+  content: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface DiscoursePostCreatedPayload extends DiscourseAuthorContext {
+  postId: string;
+  topicId: string;
+  topicSlug: string | null;
+  postNumber: number;
+  content: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface DiscourseSolutionAcceptedPayload extends DiscourseAuthorContext {
+  postId: string;
+  topicId: string;
+  topicSlug: string | null;
+  postNumber: number;
+  url: string;
+  createdAt: string;
+}

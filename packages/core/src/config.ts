@@ -33,6 +33,16 @@ const ConfigSchema = z.object({
   twitterTrackedAccounts: z.string().default(''),
   twitterPollIntervalMs: z.coerce.number().default(900000),
 
+  // Discourse
+  discourseBaseUrl: z.string().url().optional(),
+  discourseApiKey: z.string().optional(),
+  discourseApiUsername: z.string().optional(),
+  // Comma-separated category slugs treated as governance categories
+  discourseGovernanceCategories: z.string().default(''),
+  discoursePollIntervalMs: z.coerce.number().default(900000),
+  // When true, the poller logs what would be persisted instead of enqueueing jobs
+  discourseDryRun: z.coerce.boolean().default(false),
+
   // Anthropic (Claude)
   anthropicApiKey: z.string().optional(),
 
@@ -80,6 +90,12 @@ function loadConfig(): Config {
       twitterClientSecret: process.env.TWITTER_CLIENT_SECRET,
       twitterTrackedAccounts: process.env.TWITTER_TRACKED_ACCOUNTS,
       twitterPollIntervalMs: process.env.TWITTER_POLL_INTERVAL_MS,
+      discourseBaseUrl: process.env.DISCOURSE_BASE_URL,
+      discourseApiKey: process.env.DISCOURSE_API_KEY,
+      discourseApiUsername: process.env.DISCOURSE_API_USERNAME,
+      discourseGovernanceCategories: process.env.DISCOURSE_GOVERNANCE_CATEGORIES,
+      discoursePollIntervalMs: process.env.DISCOURSE_POLL_INTERVAL_MS,
+      discourseDryRun: process.env.DISCOURSE_DRY_RUN,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
       resendApiKey: process.env.RESEND_API_KEY,
