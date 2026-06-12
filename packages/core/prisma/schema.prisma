@@ -26,6 +26,10 @@ model Client {
   platformConfigs  PlatformConfig[]
   metrics          Metric[]
   threats          Threat[]
+  advocateScores   AdvocateScore[]
+  scoringConfig    ScoringConfig?
+  advocateBriefs   AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
 
   @@map("clients")
 }
@@ -74,6 +78,9 @@ model Member {
   platformIdentities PlatformIdentity[]
   messages          Message[]
   events            Event[]
+  advocateScores    AdvocateScore[]
+  advocateBriefs    AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
 
   @@index([clientId])
   @@index([email])
@@ -247,4 +254,110 @@ enum ThreatStatus {
   ACTIONED
   RESOLVED
   FALSE_POSITIVE
+}
+
+// ---------------------------------------------------------------------------
+// Advocate scoring
+//
+// AdvocateScore stores, per member and per period (ISO week, e.g. "2026-W24"),
+// the composite advocacy score and its individual components. ScoringConfig
+// holds the per-client weighting applied to each component when computing the
+// composite. See packages/core/src/scoring for the maths.
+// ---------------------------------------------------------------------------
+
+model AdvocateScore {
+  id               String          @id @default(cuid())
+  memberId         String
+  clientId         String
+  period           String          // ISO week, e.g. "2026-W24"
+  compositeScore   Float           // weighted, normalised 0-100
+  activityScore    Float           // log-scaled message + event volume
+  consistencyScore Float           // distinct active days over trailing 90d
+  breadthScore     Float           // distinct platforms the member is active on
+  influenceScore   Float           // engagement received relative to messages sent
+  helpfulnessScore Float           @default(0) // Claude-evaluated, stubbed at 0
+  segment          AdvocateSegment // percentile-derived bucket per client
+  metadata         Json?           @default("{}")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, period])
+  @@index([clientId, period])
+  @@index([clientId, segment])
+  @@index([clientId, period, compositeScore])
+  @@map("advocate_scores")
+}
+
+enum AdvocateSegment {
+  CHAMPION // top 5%
+  ADVOCATE // next 15%
+  ACTIVE   // next 30%
+  CASUAL   // next 30%
+  LURKER   // remainder
+}
+
+model ScoringConfig {
+  id                String   @id @default(cuid())
+  clientId          String   @unique
+  // Component weights. Defaults are sensible starting points and are
+  // normalised at compute time so they need not sum to exactly 1.
+  activityWeight    Float    @default(0.25)
+  consistencyWeight Float    @default(0.20)
+  breadthWeight     Float    @default(0.15)
+  influenceWeight   Float    @default(0.30)
+  helpfulnessWeight Float    @default(0.10)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("scoring_configs")
+}
+
+// Cache of the Claude-evaluated helpfulness component, keyed per member per
+// period. Populated by the scoring agent (which has the Anthropic client) and
+// read back by the core scoring pipeline so the maths stays Claude-free.
+model HelpfulnessEvaluation {
+  id           String   @id @default(cuid())
+  memberId     String
+  clientId     String
+  period       String   // ISO week, e.g. "2026-W24"
+  score        Float    // 0-100, as rated by Claude
+  rationale    String?  // short justification returned alongside the score
+  sampleSize   Int      @default(0) // number of messages sampled
+  model        String   // Claude model used
+  promptVersion String  // versioned prompt template id
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, period])
+  @@index([clientId, period])
+  @@map("helpfulness_evaluations")
+}
+
+// A Claude-generated advocate brief: a structured profile of a member used by
+// the community team. The brief itself is stored as JSON; metadata captures how
+// it was produced so briefs can be regenerated and compared over time.
+model AdvocateBrief {
+  id              String   @id @default(cuid())
+  memberId        String
+  clientId        String
+  brief           Json     // structured brief (see packages/agents/src/scoring-agent/briefs.ts)
+  model           String   // Claude model used
+  promptVersion   String   // versioned prompt template id
+  contextProfileUsed Boolean @default(false) // whether a client Context Profile grounded the brief
+  createdAt       DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+  @@index([clientId, createdAt])
+  @@map("advocate_briefs")
 }

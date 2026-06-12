@@ -7,3 +7,4 @@ export * from './logger';
 export * from './errors';
 export * from './types/platforms';
 export * from './clients';
+export * from './scoring';
