@@ -314,4 +314,5 @@ model ContextProfile {
 enum ContextProfileStatus {
   draft
   active
+  archived
 }

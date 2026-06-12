@@ -16,6 +16,7 @@
     "@attrakt/core": "workspace:*",
     "@attrakt/api": "workspace:*",
     "@anthropic-ai/sdk": "^0.71.2",
+    "dotenv": "^16.4.5",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"
   },

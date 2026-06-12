@@ -78,6 +78,9 @@ importers:
       '@attrakt/core':
         specifier: workspace:*
         version: link:../core
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
       node-cron:
         specifier: ^3.0.3
         version: 3.0.3

@@ -3,6 +3,8 @@ export * from './types';
 export * from './utils';
 export * from './services/identity-resolution';
 export * from './services/knowledge';
+export * from './services/context-profile';
+export * from './constants';
 export * from './config';
 export * from './logger';
 export * from './errors';
