@@ -18,7 +18,7 @@ shipped · **STUB** = scaffolding only, does not do the job on a schedule/real d
 | 2 | GitHub ingestion (persist activity) | **WORKS** (events only) | Webhook receiver + worker both have launch scripts and persist `Event` rows; caveat: **no webhook signature verification**, and GitHub creates no `Message` rows (by design) | `packages/mcp-servers/src/github-webhook/index.ts`, `github-bot/worker.ts`, `github-bot/index-worker.ts` |
 | 3 | Identity resolution (merge identities into Members) | **PARTIAL** | Links new `PlatformIdentity` rows to a `Member` via 5 strategies and creates new members; **does not merge two already-distinct Member records**, and cross-platform linking leans almost entirely on username | `packages/core/src/services/identity-resolution.ts` |
 | 4 | pulse-agent (real digest from real data) | **PARTIAL** | Produces a real markdown digest from live DB rows via Claude (with template fallback) and delivers it; but the **metrics section is empty (N/A)** because nothing populates the `Metric` table (see #5) | `packages/agents/src/pulse-agent/index.ts` |
-| 5 | Metric model + TimescaleDB hypertables + scheduled writes | **STUB** | Computation logic is fully written but `scheduleMetricsComputation()` and `createMetricsWorker()` are **exported and never called anywhere**; **hypertable creation is commented out** | `packages/api/src/queues/scheduler.ts`, `queues/metrics-worker.ts`, `packages/core/prisma/migrations/0_enable_timescaledb.sql` |
+| 5 | Metric model + scheduled writes (TimescaleDB deferred) | **WORKS** ✅ (fixed 2026-06-12) | API startup now calls `scheduleMetricsComputation()` + `createMetricsWorker()`; computation extracted to `computeMetrics()` and exposed via `pnpm --filter @attrakt/api metrics:compute`. Verified: a manual run wrote 11 `Metric` rows with real values against plain Postgres. TimescaleDB **explicitly deferred** for MVP (tables work as plain Postgres). | `packages/api/src/server.ts`, `queues/scheduler.ts`, `queues/metrics-worker.ts`, `queues/metrics-cli.ts`, `packages/core/prisma/migrations/0_enable_timescaledb.sql` |
 
 > **Note A — runtime blockers found while wiring Discord (fixed).** Beyond the
 > missing scripts, no worker could actually run because of three latent bugs:
@@ -136,7 +136,25 @@ _Original finding (pre-fix):_
   with `metadata.type = 'daily_digest'` and `value: 0` — a hack that pollutes the
   MESSAGE_VOLUME series; and the pinned model id is dated.
 
-### 5. Metric model + TimescaleDB hypertables — STUB
+### 5. Metric model + scheduled writes — WORKS ✅ (fixed 2026-06-12)
+
+**Fix:** (a) `server.ts` now calls `scheduleMetricsComputation()` and
+`createMetricsWorker()` in its startup block, so the recurring jobs are
+registered and a worker consumes them; (b) the computation body was extracted
+into a reusable `computeMetrics(clientId, period)` and exposed as a manual CLI
+(`pnpm --filter @attrakt/api metrics:compute [--client <id>] [--period hour|day|week]`);
+(c) the TimescaleDB migration now records the **MVP deferral decision** — we are
+**not** using hypertables; the `create_hypertable` lines stay commented with a
+note, and `messages`/`events`/`metrics` run as plain Postgres tables.
+
+**Verified:** ran `metrics:compute` once against live Postgres → logged
+`Computed metrics count=11` and wrote 11 `Metric` rows: `DAU=1`, `WAU=1`,
+`MAU=1`, `MESSAGE_VOLUME=2`, `RESPONSE_RATE=50`, `CONTRIBUTOR_VELOCITY=6`,
+`SENTIMENT_AVERAGE=0.2`, `GROWTH_RATE=100`, `MEMBER_COUNT=1`. Confirmed the
+target Postgres has no `timescaledb_information.hypertables` and the three tables
+are ordinary tables. The scheduler/worker BullMQ hop is subject to Note B.
+
+_Original finding (pre-fix):_
 
 - `metrics-worker.ts` computes a full set (DAU/WAU/MAU, message volume, response
   rate, contributor velocity, sentiment avg/pos/neg, growth rate, member count)

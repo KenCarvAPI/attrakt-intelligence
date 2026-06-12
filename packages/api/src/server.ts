@@ -6,6 +6,8 @@ import { Queue } from 'bullmq';
 import { redisConnection } from './queues/connection';
 import { jobTypes } from './queues/types';
 import { performHealthCheck } from './health';
+import { scheduleMetricsComputation } from './queues/scheduler';
+import { createMetricsWorker } from './queues/metrics-worker';
 import { config, log } from '@attrakt/core';
 
 const app = express();
@@ -47,5 +49,18 @@ if (require.main === module) {
   app.listen(PORT, () => {
     log.info({ port: PORT }, 'API server running');
     log.info({ url: `http://localhost:${PORT}/admin/queues` }, 'Queue dashboard available');
+  });
+
+  // Bootstrap background processing: schedule recurring metric jobs and start
+  // the worker that consumes them. Without this the Metric table is never
+  // populated (which is what left the pulse digest's metrics empty).
+  scheduleMetricsComputation();
+  const metricsWorker = createMetricsWorker();
+  log.info({}, 'Metrics scheduler and worker started');
+
+  process.on('SIGINT', async () => {
+    log.info({}, 'Shutting down API server');
+    await metricsWorker.close();
+    process.exit(0);
   });
 }

@@ -1,15 +1,26 @@
 -- Enable TimescaleDB extension
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- Convert messages table to hypertable (after Prisma migration creates it)
--- Run this after the initial Prisma migration
--- SELECT create_hypertable('messages', 'created_at');
-
--- Convert events table to hypertable
--- SELECT create_hypertable('events', 'created_at');
-
--- Convert metrics table to hypertable
--- SELECT create_hypertable('metrics', 'created_at');
-
--- Note: These commands should be run manually after Prisma migration,
--- or added to a custom migration script
+-- ---------------------------------------------------------------------------
+-- DECISION (2026-06-12): TimescaleDB hypertables are DEFERRED for the MVP.
+--
+-- The `messages`, `events`, and `metrics` tables run as plain PostgreSQL tables
+-- for now. All queries (ingestion writes, metric computation, pulse digest
+-- reads) work unchanged against regular tables — TimescaleDB is a performance
+-- optimization for time-series scale, not a correctness requirement. Verified
+-- the metrics pipeline writes and reads correctly against plain Postgres.
+--
+-- The CREATE EXTENSION above is harmless on a stock Postgres image if the
+-- extension is unavailable will simply error; it is only required once we opt
+-- into hypertables. To enable hypertables later, run the statements below
+-- AFTER the Prisma schema has created the tables. Converting an existing table
+-- is supported via migrate_data => true.
+--
+--   SELECT create_hypertable('messages', 'created_at', migrate_data => true);
+--   SELECT create_hypertable('events',   'created_at', migrate_data => true);
+--   SELECT create_hypertable('metrics',  'created_at', migrate_data => true);
+--
+-- Note: hypertables impose constraints (e.g. the partitioning column must be
+-- part of any unique index), so revisit the unique constraints on these tables
+-- before enabling.
+-- ---------------------------------------------------------------------------
