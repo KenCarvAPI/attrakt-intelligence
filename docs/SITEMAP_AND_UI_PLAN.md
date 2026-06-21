@@ -1,9 +1,20 @@
 # Attrakt — Site Map & UI Plan
 
 **Date:** 2026-06-21
-**Status:** Draft v1 (for review)
+**Status:** Draft v2 (refined after scope decisions)
 **Scope:** Information architecture, surfaces, navigation, and screen inventory
 for the Attrakt Community Intelligence Platform.
+
+### Decisions locked in (2026-06-21)
+
+- **Advocate Portal is in scope** as a distinct, external member-facing surface
+  (`advocates.attrakt.io`) — not folded into the client app.
+- **Onboarding is Attrakt-provisioned**, not self-serve. Attrakt connects a
+  client's platforms and configures the workspace via the Ops Console; the client
+  logs into a ready-to-use workspace. The client app therefore has **no
+  platform-connection wizard** — it has a guided first-run *tour* instead, and
+  platform connections are **read-only / request-a-change** for clients.
+- **Next step:** refine this plan (no wireframes or code yet).
 
 This plan is grounded in the existing data model (`Client`, `Member`,
 `PlatformIdentity`, `Message`, `Event`, `Metric`, `Threat`) and the working
@@ -31,15 +42,21 @@ audiences I recommend adding.
 
 | # | Audience | Surface | Why it matters |
 |---|----------|---------|----------------|
-| 4 | **The advocate / community member** | Advocate Portal (external) | This is the missing half of "advocacy." Today the platform watches advocates; it never *engages* them. A member-facing portal (rank, impact, badges, quests/rewards) turns passive measurement into an active advocacy loop and is a growth flywheel. |
+| 4 | **The advocate / community member** | Advocate Portal (external) ✅ **in scope** | This is the missing half of "advocacy." Today the platform watches advocates; it never *engages* them. A member-facing portal (rank, impact, badges, quests/rewards) turns passive measurement into an active advocacy loop and is a growth flywheel. |
 | 5 | **Client sub-roles: Moderator & Viewer/Stakeholder** | Roles inside Client Workspace | A community manager, a moderator (threat queue only), and a founder/exec (read-only dashboards + reports) have very different needs. One "client login" is too coarse. |
 | 6 | **Developer / integrator** | Developer Portal | API keys, webhooks, docs, usage. Already on the roadmap ("API Access"). Needed for clients who want to pipe data into their own tools. |
 | 7 | **Prospect / public** | Marketing site + onboarding funnel | Landing, pricing, demo request, self-serve signup. The front door to surface #1. |
 
 **Recommendation:** Build #1, #2, #3 first (your stated need), design #5 in from
-day one as roles (cheap now, expensive to retrofit), and treat #4 (Advocate
-Portal) as the highest-value *next* surface because it directly serves the
-"advocate" goal you called out.
+day one as roles (cheap now, expensive to retrofit), and ship #4 (Advocate
+Portal) as a confirmed external surface right after the core monitoring loop —
+it directly serves the "advocate" goal you called out.
+
+> **Provisioning model note:** Because onboarding is Attrakt-provisioned, the
+> Ops Console (#2) is effectively a *prerequisite* for client value, not a
+> later-phase nicety — Attrakt must be able to connect platforms and stand up a
+> workspace before a client can use #1. This pulls the Ops Console's
+> provisioning surface earlier in the build order (see §5).
 
 ### Role / permission matrix (within the Client Workspace)
 
@@ -64,7 +81,7 @@ blended app:
 ```
 attrakt.io               → Marketing site + onboarding funnel (public)
 app.attrakt.io           → Client Workspace        (tenant-scoped)   [Audience 1, 5]
-advocates.attrakt.io     → Advocate Portal          (member-scoped)   [Audience 4]  (proposed)
+advocates.attrakt.io     → Advocate Portal          (member-scoped)   [Audience 4]  ✅ in scope
 console.attrakt.io       → Attrakt Ops Console      (cross-tenant)    [Audience 2]
 admin.attrakt.io         → System Admin             (global/infra)    [Audience 3]
 developers.attrakt.io    → Developer/API portal     (tenant-scoped)   [Audience 6]  (proposed)
@@ -80,16 +97,21 @@ Workspace; the Ops Console and System Admin are sibling apps in the monorepo.
 
 ### 3.1 Client Workspace — `app.attrakt.io` (Audience 1)
 
-**Onboarding flow** (first run, wizard):
-1. `/signup` or `/invite/:token` → create account / accept team invite
-2. `/onboarding/workspace` → name community, choose type (dev / Web3 / SaaS / brand)
-3. `/onboarding/connect` → connect platforms
-   - Discord: install bot → pick server & channels
-   - GitHub: install GitHub App / add webhook → pick repos/org
-   - Twitter: authorize API → set tracked accounts/keywords
-4. `/onboarding/preferences` → digest cadence, alert routing (Slack/email), severity thresholds
-5. `/onboarding/team` → invite teammates with roles
-6. `/onboarding/done` → "We're now tracking. First digest arrives tomorrow." → setup health checklist
+**Onboarding flow (Attrakt-provisioned).** Platform connection and workspace
+setup happen in the Ops Console *before* the client logs in (see §3.2). The
+client never sees a connect-your-platforms wizard. Their first run is a short
+guided tour of an already-live workspace:
+1. `/invite/:token` → accept invite, set password / SSO
+2. `/welcome` → guided tour: "Your community is already connected and being
+   tracked." Highlights Overview, Members, Threats.
+3. `/welcome/preferences` → confirm digest cadence & personal alert routing
+   (Slack/email) — the *only* setup a client self-serves
+4. `/welcome/team` → (Owner only) invite teammates with roles
+5. → land on Overview, with a lightweight setup-health banner if anything Attrakt
+   provisioned is still warming up (e.g. metrics not yet computed)
+
+Clients can *view* connection status and *request changes* but cannot edit
+credentials — those live with Attrakt (see `/settings/connections` below).
 
 **Main navigation:**
 ```
@@ -126,7 +148,7 @@ Workspace; the Ops Console and System Admin are sibling apps in the monorepo.
   • Export PDF / Markdown
 
 /settings                 Settings
-  /settings/connections   Platform connections & health
+  /settings/connections   Platform connections & health (read-only; "request a change" → Attrakt)
   /settings/team          Team & roles (Audience 5)
   /settings/alerts        Alert routing & thresholds
   /settings/digest        Digest preferences
@@ -145,8 +167,16 @@ Cross-tenant view for Attrakt's growth/success team. Same data, *portfolio* lens
   • Aggregate engagement & threat heatmap across communities
 
 /clients                  Client list
+  /clients/new            Provision a new client (Attrakt-led onboarding)
+    • Create workspace, choose type, set plan
   /clients/:id            Client detail (usage, adoption, onboarding status)
     • "View as client" (impersonate, audit-logged)
+  /clients/:id/setup      Provisioning console — connect platforms ON BEHALF of client
+    • Discord: install bot → pick server & channels
+    • GitHub: install GitHub App / webhook → pick repos/org
+    • Twitter: authorize API → tracked accounts/keywords
+    • Set digest cadence, alert routing, severity thresholds, seed team invites
+    • Provisioning checklist → "ready to hand off" gate
 
 /growth                   Ecosystem growth
   • Cross-community trends & benchmarks
@@ -196,7 +226,7 @@ Infra / backend changes. Maps to operational gaps noted in the MVP audit
 /audit                    Audit log (all admin & impersonation actions)
 ```
 
-### 3.4 Advocate Portal — `advocates.attrakt.io` (Audience 4, proposed)
+### 3.4 Advocate Portal — `advocates.attrakt.io` (Audience 4, ✅ in scope)
 
 External, member-facing. Magic-link or OAuth (connect Discord/GitHub/Twitter).
 
@@ -243,14 +273,20 @@ External, member-facing. Magic-link or OAuth (connect Discord/GitHub/Twitter).
 
 ## 5. Recommended build phases
 
+Reordered to reflect the Attrakt-provisioned model: clients can't self-onboard,
+so the Ops Console **provisioning surface** must exist before the client app
+delivers value.
+
 | Phase | Deliverable |
 |-------|-------------|
 | **0** | Design system + app shell (sidebar, tenant switcher, auth, RBAC scaffolding) |
-| **1** | Client Workspace: Overview/Pulse, Members + profiles, Threats queue, Settings/Connections (the core monitoring loop) |
-| **2** | Client: Analytics, Advocates, Reports; client sub-roles (Mod/Viewer) |
-| **3** | Ops Console (portfolio + growth + success) |
-| **4** | System Admin (health, tenants, data ops, agents) |
-| **5** | Advocate Portal + Developer Portal + Marketing site |
+| **1** | **Ops Console — provisioning** (`/clients/new`, `/clients/:id/setup`, connect platforms on behalf of client). Unblocks every client workspace. |
+| **2** | Client Workspace: guided first-run tour, Overview/Pulse, Members + profiles, Threats queue, read-only Connections (the core monitoring loop) |
+| **3** | Client: Analytics, Advocates (internal view), Reports; client sub-roles (Mod/Viewer) |
+| **4** | Ops Console — portfolio + growth + success (cross-tenant lenses) |
+| **5** | Advocate Portal (external, in scope) |
+| **6** | System Admin (health, tenants, data ops, agents) |
+| **7** | Developer Portal + Marketing site |
 
 Note: Phase 1 analytics depend on the metrics pipeline actually running (see
 `docs/MVP_GAP_AUDIT.md`) — worth confirming the scheduler/worker are live before
@@ -258,16 +294,24 @@ building analytics-heavy screens.
 
 ---
 
-## 6. Open questions for you
+## 6. Resolved & remaining questions
 
-1. **Advocate Portal** — in scope as a distinct external surface, or fold a
-   lightweight "advocate view" into the Client Workspace for now?
-2. **Self-serve vs. white-glove onboarding** — should clients connect platforms
-   themselves (full wizard), or does Attrakt provision for them (Ops Console
-   does setup)? This changes how much onboarding UI we build first.
-3. **Client sub-roles** — confirm the four roles (Owner / Community Mgr /
-   Moderator / Viewer) match how your customers are organized.
-4. **Which surface to wireframe first** — recommend Client Workspace Overview +
-   Members, since that's the daily-use core.
+**Resolved (2026-06-21):**
+- ✅ Advocate Portal → distinct external surface, in scope.
+- ✅ Onboarding → Attrakt-provisioned (Ops Console does setup; client gets a
+  ready workspace).
+
+**Still open:**
+1. **Client sub-roles** — confirm the four roles (Owner / Community Mgr /
+   Moderator / Viewer) match how your customers are organized, or adjust.
+2. **Advocate Portal auth** — how do members authenticate? Magic link, or OAuth
+   by connecting their Discord/GitHub/Twitter (which also strengthens identity
+   resolution)? Recommend OAuth-connect.
+3. **Advocate opt-in & privacy** — is appearing on a public leaderboard opt-in or
+   opt-out? Affects GDPR posture and portal UX.
+4. **Rewards in v1** — is the advocate program recognition-only (rank/badges) at
+   launch, or do real rewards/quests ship in v1?
+5. **Whether a client can ever self-edit connections** — currently read-only +
+   "request a change." Confirm clients never need direct credential access.
 </content>
 </invoke>
