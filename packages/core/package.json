@@ -15,6 +15,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
     "member:merge": "tsx src/scripts/merge-member.ts",
+    "member:exclude": "tsx src/scripts/member-exclude.ts",
     "client:create": "tsx src/scripts/client-create.ts",
     "knowledge:add": "tsx scripts/knowledge-add.ts",
     "test": "vitest run && pnpm test:integration",

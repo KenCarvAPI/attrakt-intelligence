@@ -3,6 +3,8 @@ export * from './types';
 export * from './utils';
 export * from './services/identity-resolution';
 export * from './services/clients';
+export * from './services/members';
+export * from './services/ingestion-runs';
 export * from './services/knowledge';
 export * from './services/context-profile';
 export * from './constants';

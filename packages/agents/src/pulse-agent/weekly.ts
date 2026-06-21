@@ -23,6 +23,8 @@ import {
   periodRange,
   loadActiveContextProfile,
   formatContextForPrompt,
+  SCORABLE_MEMBER_WHERE,
+  SCORABLE_MEMBER_RELATION,
 } from '@attrakt/core';
 import { callClaude, extractJson, isLLMAvailable, loadPrompt } from '../llm';
 
@@ -190,7 +192,7 @@ export async function gatherWeeklyData(
 
   const activeWhere = (s: Date, e: Date): Prisma.MemberWhereInput => ({
     clientId,
-    deletedAt: null,
+    ...SCORABLE_MEMBER_WHERE,
     messages: { some: { createdAt: { gte: s, lt: e } } },
   });
 
@@ -205,8 +207,8 @@ export async function gatherWeeklyData(
   ] = await Promise.all([
     prisma.member.count({ where: activeWhere(start, end) }),
     prisma.member.count({ where: activeWhere(priorStart, start) }),
-    prisma.member.count({ where: { clientId, deletedAt: null, firstSeen: { gte: start, lt: end } } }),
-    prisma.member.count({ where: { clientId, deletedAt: null, firstSeen: { gte: priorStart, lt: start } } }),
+    prisma.member.count({ where: { clientId, ...SCORABLE_MEMBER_WHERE, firstSeen: { gte: start, lt: end } } }),
+    prisma.member.count({ where: { clientId, ...SCORABLE_MEMBER_WHERE, firstSeen: { gte: priorStart, lt: start } } }),
     prisma.message.count({ where: { clientId, createdAt: { gte: start, lt: end } } }),
     prisma.message.count({ where: { clientId, createdAt: { gte: priorStart, lt: start } } }),
     governanceCount(clientId, start, end),
@@ -230,7 +232,7 @@ export async function gatherWeeklyData(
 
   // Notable advocates: top movers by score this week vs prior week.
   const currentScores = await prisma.advocateScore.findMany({
-    where: { clientId, period },
+    where: { clientId, period, member: SCORABLE_MEMBER_RELATION },
     include: { member: { include: { platformIdentities: { take: 1 } } } },
     orderBy: { compositeScore: 'desc' },
     take: 40,

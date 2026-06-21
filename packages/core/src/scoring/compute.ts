@@ -13,6 +13,7 @@ import { scoreMember } from './score';
 import { assignSegments } from './segments';
 import { DEFAULT_WEIGHTS } from './weights';
 import { toPeriod, periodRange, consistencyWindowStart } from './period';
+import { SCORABLE_MEMBER_WHERE } from '../services/members';
 
 /** Summary returned to callers (CLI / worker) for logging. */
 export interface ScoringRunSummary {
@@ -155,8 +156,9 @@ export async function computeAdvocateScores(
 
   const weights = await getScoringWeights(clientId);
 
+  // Exclude merged (deletedAt) and opted-out (excluded) members from scoring.
   const members = await prisma.member.findMany({
-    where: { clientId },
+    where: { clientId, ...SCORABLE_MEMBER_WHERE },
     select: { id: true },
   });
 

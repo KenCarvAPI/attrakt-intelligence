@@ -107,6 +107,7 @@ export async function processPost(payload: DiscoursePostPayload, clientId: strin
       memberId,
       platform: 'DISCOURSE',
       eventType: eventTypeFor(payload),
+      dedupeKey: `discourse-post-${payload.postId}:${eventTypeFor(payload)}`,
       eventData: {
         postId: payload.postId,
         topicId: payload.topicId,

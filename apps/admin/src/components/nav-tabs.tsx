@@ -11,6 +11,7 @@ export function NavTabs({ slug }: { slug: string }) {
     { href: base, label: 'Overview' },
     { href: `${base}/members`, label: 'Members' },
     { href: `${base}/context`, label: 'Context' },
+    { href: `${base}/status`, label: 'Status' },
   ];
 
   return (

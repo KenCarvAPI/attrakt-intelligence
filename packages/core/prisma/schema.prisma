@@ -38,9 +38,32 @@ model Client {
   contextProfiles        ContextProfile[]
   campaignBriefs         CampaignBrief[]
   weeklyDigests          WeeklyDigest[]
+  ingestionRuns          IngestionRun[]
 
   @@index([active])
   @@map("clients")
+}
+
+// One row per ingestion run (live poll cycle or backfill chunk-set), per client
+// and platform. Backs the dashboard status page (last successful run, items
+// ingested, error count per platform) and makes backfills resumable via cursor.
+model IngestionRun {
+  id            String    @id @default(cuid())
+  clientId      String
+  platform      Platform
+  mode          String    @default("live") // "live" | "backfill"
+  status        String    @default("running") // "running" | "success" | "failed"
+  itemsIngested Int       @default(0)
+  errorCount    Int       @default(0)
+  cursor        Json?     // resumable, platform-specific (e.g. { page, lastTimestamp })
+  error         String?
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, platform, startedAt])
+  @@map("ingestion_runs")
 }
 
 model PlatformConfig {
@@ -84,6 +107,11 @@ model Member {
   deletedAt    DateTime?
   mergedIntoId String?
 
+  // Opt-out: excluded members are skipped by scoring, briefs, and digests. Used
+  // for individual data-handling opt-outs (see docs/DATA_HANDLING.md).
+  excluded       Boolean @default(false)
+  excludedReason String?
+
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformIdentities PlatformIdentity[]
   messages          Message[]
@@ -95,6 +123,7 @@ model Member {
   @@index([clientId])
   @@index([email])
   @@index([deletedAt])
+  @@index([clientId, excluded])
   @@map("members")
 }
 
@@ -152,10 +181,16 @@ model Event {
   platform     Platform
   eventType    EventType
   eventData    Json     @default("{}")
+  // Idempotency key derived from platform-native identifiers (e.g. commit sha,
+  // "pr:123:merged", "discourse-post-9:created"). Lets ingestion/backfill upsert
+  // events so duplicate webhook delivery or a re-run never double-writes. Nullable
+  // for legacy/unkeyed events; Postgres allows multiple NULLs under a unique index.
+  dedupeKey    String?
   createdAt    DateTime @default(now())
 
   member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
+  @@unique([platform, dedupeKey])
   @@index([clientId, createdAt])
   @@index([memberId])
   @@index([eventType])
