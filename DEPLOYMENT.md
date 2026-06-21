@@ -97,12 +97,17 @@ credentials live in `PlatformConfig` (set via `client:create`), not in env.
 
 - **checks:** type-check (core + admin) and the production admin build; lint runs
   advisory-only (the shared eslint ruleset/plugin needs a follow-up).
-- **test:** unit tests, the multi-tenancy integration tests, and the critical-path
-  smoke test against real Postgres + Redis service containers.
+- **test:** applies migrations with `prisma migrate deploy` (so the migration
+  history itself is validated), then runs unit tests, the multi-tenancy
+  integration tests, and the critical-path smoke test against real Postgres +
+  Redis service containers.
 
-> Known follow-up: a repo-wide `pnpm type-check`/`pnpm lint` still has
-> pre-existing cross-package `rootDir` and eslint-plugin issues; CI scopes to the
-> green, meaningful checks until that debt is paid down.
+> Known follow-up: `api`, `agents`, and `mcp-servers` are not yet type-checked in
+> isolation. The root tsconfig `paths` resolve workspace deps to source, so each
+> consumer pulls another package's `src` and trips `rootDir`. Fixing it cleanly
+> needs TypeScript project references (build `core`/`api` to declarations and
+> reference them) plus adding the `@typescript-eslint` plugin for lint. CI scopes
+> to the green checks (core + admin type-check, build, tests) until then.
 
 ## Database backup & restore
 

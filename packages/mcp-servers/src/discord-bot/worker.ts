@@ -1,13 +1,13 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { prisma, resolveIdentity, log, IngestionError, isRetryableError } from '@attrakt/core';
-import { calculateBasicSentiment } from '@attrakt/core/src/utils/sentiment';
-import type { JobData, IngestDiscordJobData } from '@attrakt/api/src/queues/types';
+import { calculateBasicSentiment } from '@attrakt/core';
+import type { JobData, IngestDiscordJobData } from '@attrakt/api';
 import type {
   DiscordMessagePayload,
   DiscordMemberPayload,
   DiscordReactionPayload,
-} from '@attrakt/core/src/types/platforms';
+} from '@attrakt/core';
 
 /**
  * Discord ingestion worker
@@ -189,19 +189,23 @@ export async function processMemberJoin(payload: DiscordMemberPayload, clientId:
       });
     }
 
-    // Create join event
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'DISCORD',
-        eventType: 'JOIN',
-        eventData: {
-          guildId: payload.guildId,
-          joinedTimestamp: payload.joinedTimestamp,
+    // Create join event (idempotent on user + join timestamp)
+    await prisma.event.createMany({
+      data: [
+        {
+          clientId,
+          memberId,
+          platform: 'DISCORD',
+          eventType: 'JOIN',
+          dedupeKey: `discord-${payload.userId}:JOIN:${payload.joinedTimestamp ?? 'na'}`,
+          eventData: {
+            guildId: payload.guildId,
+            joinedTimestamp: payload.joinedTimestamp,
+          },
+          createdAt: new Date(payload.joinedTimestamp || Date.now()),
         },
-        createdAt: new Date(payload.joinedTimestamp || Date.now()),
-      },
+      ],
+      skipDuplicates: true,
     });
 
     logger.debug({ memberId, userId: payload.userId }, 'Member join processed');
@@ -232,18 +236,22 @@ export async function processMemberLeave(payload: DiscordMemberPayload, clientId
     });
 
     if (identity) {
-      await prisma.event.create({
-        data: {
-          clientId,
-          memberId: identity.memberId,
-          platform: 'DISCORD',
-          eventType: 'LEAVE',
-          eventData: {
-            guildId: payload.guildId,
-            leftTimestamp: payload.leftTimestamp,
+      await prisma.event.createMany({
+        data: [
+          {
+            clientId,
+            memberId: identity.memberId,
+            platform: 'DISCORD',
+            eventType: 'LEAVE',
+            dedupeKey: `discord-${payload.userId}:LEAVE:${payload.leftTimestamp ?? 'na'}`,
+            eventData: {
+              guildId: payload.guildId,
+              leftTimestamp: payload.leftTimestamp,
+            },
+            createdAt: new Date(payload.leftTimestamp || Date.now()),
           },
-          createdAt: new Date(payload.leftTimestamp || Date.now()),
-        },
+        ],
+        skipDuplicates: true,
       });
 
       logger.debug({ memberId: identity.memberId, userId: payload.userId }, 'Member leave processed');
@@ -277,19 +285,23 @@ export async function processReaction(payload: DiscordReactionPayload, clientId:
     });
 
     if (identity) {
-      await prisma.event.create({
-        data: {
+      await prisma.event.createMany({
+        data: [
+          {
           clientId,
           memberId: identity.memberId,
           platform: 'DISCORD',
           eventType: 'MESSAGE_REACTION',
+          dedupeKey: `discord-${payload.messageId}:REACTION:${payload.userId}:${payload.emoji}`,
           eventData: {
             messageId: payload.messageId,
             channelId: payload.channelId,
             emoji: payload.emoji,
           },
           createdAt: new Date(payload.timestamp),
-        },
+          },
+        ],
+        skipDuplicates: true,
       });
 
       logger.debug({ memberId: identity.memberId, messageId: payload.messageId }, 'Reaction processed');

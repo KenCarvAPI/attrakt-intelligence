@@ -66,8 +66,8 @@ export async function getOverview(clientId: string): Promise<OverviewData> {
   ] = await Promise.all([
     distinctActiveMembers(clientId, d30, now),
     distinctActiveMembers(clientId, d60, d30),
-    prisma.member.count({ where: { clientId, deletedAt: null, firstSeen: { gte: d30 } } }),
-    prisma.member.count({ where: { clientId, deletedAt: null, firstSeen: { gte: d60, lt: d30 } } }),
+    prisma.member.count({ where: { clientId, deletedAt: null, excluded: false, firstSeen: { gte: d30 } } }),
+    prisma.member.count({ where: { clientId, deletedAt: null, excluded: false, firstSeen: { gte: d60, lt: d30 } } }),
     prisma.message.count({ where: { clientId, createdAt: { gte: d30 } } }),
     prisma.message.count({ where: { clientId, createdAt: { gte: d60, lt: d30 } } }),
     prisma.message.count({ where: { clientId, platform: 'DISCOURSE', createdAt: { gte: d30 } } }),
@@ -106,15 +106,17 @@ export async function getOverview(clientId: string): Promise<OverviewData> {
   }
   const activitySeries = [...buckets.entries()].map(([date, v]) => ({ date, ...v }));
 
-  // Segment distribution (latest period).
+  // Segment distribution (latest period). Filtered to live, non-excluded members
+  // via the member relation (groupBy can't filter on a related field).
   let segments: { segment: AdvocateSegment; count: number }[] = [];
   if (latestScore) {
-    const grouped = await prisma.advocateScore.groupBy({
-      by: ['segment'],
-      where: { clientId, period: latestScore.period },
-      _count: { _all: true },
+    const scores = await prisma.advocateScore.findMany({
+      where: { clientId, period: latestScore.period, member: { deletedAt: null, excluded: false } },
+      select: { segment: true },
     });
-    segments = grouped.map((g) => ({ segment: g.segment, count: g._count._all }));
+    const counts = new Map<AdvocateSegment, number>();
+    for (const s of scores) counts.set(s.segment, (counts.get(s.segment) ?? 0) + 1);
+    segments = [...counts.entries()].map(([segment, count]) => ({ segment, count }));
   }
 
   const messagesByPlatform = ALL_PLATFORMS.map((platform) => ({
@@ -136,7 +138,7 @@ export async function getOverview(clientId: string): Promise<OverviewData> {
 // --- Members ----------------------------------------------------------------
 export async function listMembers(clientId: string) {
   const members = await prisma.member.findMany({
-    where: { clientId, deletedAt: null },
+    where: { clientId, deletedAt: null, excluded: false },
     include: {
       platformIdentities: { select: { platform: true } },
       advocateScores: { orderBy: { period: 'desc' }, take: 1 },

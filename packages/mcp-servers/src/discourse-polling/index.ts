@@ -23,8 +23,8 @@ import {
   type DiscourseClient,
   type DiscourseTopic,
 } from '@attrakt/core';
-import type { JobData } from '@attrakt/api/src/queues/types';
-import type { DiscoursePostPayload } from '@attrakt/core/src/types/platforms';
+import type { JobData } from '@attrakt/api';
+import type { DiscoursePostPayload } from '@attrakt/core';
 
 function governanceSlugs(): Set<string> {
   return new Set(

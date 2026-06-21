@@ -1,5 +1,5 @@
 import { addJob, getTwitterClient, config, log } from '@attrakt/core';
-import type { JobData, IngestTwitterJobData } from '@attrakt/api/src/queues/types';
+import type { JobData, IngestTwitterJobData } from '@attrakt/api';
 
 const twitterClient = getTwitterClient().readOnly;
 

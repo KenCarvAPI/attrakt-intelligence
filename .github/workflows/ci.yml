@@ -6,10 +6,12 @@ on:
   pull_request:
 
 jobs:
-  # Type-checking and the production admin build. We type-check the packages whose
-  # tsconfigs are clean (core, admin); a repo-wide `pnpm type-check`/`pnpm lint`
-  # still has pre-existing cross-package rootDir + eslint-plugin debt (tracked
-  # separately), so lint runs advisory-only for now.
+  # Type-checking and the production admin build. We type-check core + admin (clean
+  # tsconfigs). The api/agents/mcp-servers packages can't be type-checked in
+  # isolation yet because the root tsconfig `paths` resolve workspace deps to
+  # source (so each consumer pulls another package's src and trips `rootDir`);
+  # fixing that needs a project-references refactor (tracked, see DEPLOYMENT.md).
+  # Lint is advisory until the shared eslint plugin/ruleset is added.
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -85,7 +87,7 @@ jobs:
       - name: Prepare database
         run: |
           pnpm --filter @attrakt/core exec prisma generate
-          pnpm --filter @attrakt/core exec prisma db push --skip-generate --accept-data-loss
+          pnpm --filter @attrakt/core exec prisma migrate deploy
       # Build core so the agents smoke test resolves @attrakt/core declarations.
       - run: pnpm --filter @attrakt/core build
 

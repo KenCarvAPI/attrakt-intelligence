@@ -1,7 +1,7 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { processPulseJob } from './index';
-import type { JobData, AgentPulseJobData } from '@attrakt/api/src/queues/types';
+import type { JobData, AgentPulseJobData } from '@attrakt/api';
 import { log } from '@attrakt/core';
 
 /**

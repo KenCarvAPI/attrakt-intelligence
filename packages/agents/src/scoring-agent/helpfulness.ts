@@ -7,7 +7,7 @@
  * runs are cheap, and calls are batched + rate-limited. The core scoring
  * pipeline reads the cached scores back when computing composites.
  */
-import { prisma, log, config, toPeriod, periodRange } from '@attrakt/core';
+import { prisma, log, config, toPeriod, periodRange, SCORABLE_MEMBER_WHERE } from '@attrakt/core';
 import { renderPrompt, HELPFULNESS_PROMPT_VERSION } from '../prompts';
 import { createClaude, parseJsonResponse, runBatched, type CompleteFn } from '../claude';
 
@@ -59,9 +59,9 @@ export async function evaluateHelpfulness(
   const period = toPeriod(referenceDate);
   const { start, end } = periodRange(referenceDate);
 
-  // Candidate members: those active in the period.
+  // Candidate members: those active in the period (excluding merged/opted-out).
   const members = await prisma.member.findMany({
-    where: { clientId, messages: { some: { createdAt: { gte: start, lt: end } } } },
+    where: { clientId, ...SCORABLE_MEMBER_WHERE, messages: { some: { createdAt: { gte: start, lt: end } } } },
     select: { id: true, displayName: true },
   });
 
