@@ -1,155 +1,126 @@
 # Deployment Guide
 
-## Prerequisites
+How Attrakt Intelligence is deployed for production, the env-var checklist, CI,
+and the backup/restore approach.
 
-- Node.js 20+
-- pnpm 8+
-- Docker and Docker Compose
-- PostgreSQL 16 with TimescaleDB extension
-- Redis 7+
+## Topology
 
-## Local Development Setup
+| Component | Host | Notes |
+|-----------|------|-------|
+| Admin dashboard (`apps/admin`, Next.js) | **Vercel** | Server components hit Postgres directly; static + SSR. |
+| API server (`packages/api`) | **Railway** | Express: health, Bull-Board, brief/knowledge/campaign routes; boots the metrics scheduler + worker. |
+| Workers & bots (`packages/mcp-servers`) | **Railway** | Discord bot + worker, GitHub webhook + worker, Discourse polling + worker. |
+| Agents (`packages/agents`) | **Railway** | Pulse (weekly digest) and scoring/brief workers. |
+| Postgres | **Railway managed Postgres** (plain) | TimescaleDB is **deferred** — hypertable lines stay commented; tables run as plain Postgres. |
+| Redis | **Upstash** | BullMQ transport. |
 
-1. Clone the repository:
+**Why Railway for the backend:** it runs several long-lived services + cron from
+one repo with managed Postgres, minimal ops, and good DX — the right trade for an
+MVP. (Alternatives: Render or Fly.io would also work; Railway wins on setup
+speed.) The admin app goes to Vercel because it is a Next.js app and Vercel is the
+lowest-friction host for it.
+
+> Out of scope for MVP and **not deployed**: Twitter ingestion, Discord message
+> sending, threat/protection services, and live internal connectors.
+
+## Services to deploy (Railway)
+
+Each is its own Railway service from this monorepo, with a start command:
+
+| Service | Start command |
+|---------|---------------|
+| api | `pnpm --filter @attrakt/api start` |
+| discord-bot | `pnpm --filter @attrakt/mcp-servers discord-bot` |
+| discord-worker | `pnpm --filter @attrakt/mcp-servers discord-worker` |
+| github-webhook | `pnpm --filter @attrakt/mcp-servers github-webhook` |
+| github-worker | `pnpm --filter @attrakt/mcp-servers github-worker` |
+| discourse-polling | `pnpm --filter @attrakt/mcp-servers discourse-polling` |
+| discourse-worker | `pnpm --filter @attrakt/mcp-servers discourse-worker` |
+| pulse-agent | `pnpm --filter @attrakt/agents pulse-agent` |
+
+## Deploy steps (in order)
+
+1. **Provision data stores.** Create the Railway Postgres plugin and an Upstash
+   Redis database. Copy their connection strings.
+2. **Run migrations** against the production database (from a machine with
+   `DATABASE_URL` set):
    ```bash
-   git clone <repository-url>
-   cd Attrakt_intellignece
+   pnpm --filter @attrakt/core exec prisma migrate deploy
    ```
-
-2. Install dependencies:
+   TimescaleDB is deferred — do **not** run the `create_hypertable` lines; the
+   tables work as plain Postgres.
+3. **Provision the first client** (white-glove onboarding; no self-serve UI):
    ```bash
-   pnpm install
+   pnpm client:create --name "Gnosis" --slug gnosis \
+     --discord-guild <id> --github-org <org> --discourse-url <forum-url>
    ```
-
-3. Start local services:
+4. **Deploy the backend services** on Railway (table above), each with the shared
+   env vars below. Set the GitHub webhook receiver's public URL as the repo/org
+   webhook target, secured with `GITHUB_WEBHOOK_SECRET`.
+5. **Deploy the admin app** to Vercel. Set its env vars (`DATABASE_URL`,
+   `ADMIN_PASSWORD`). The admin build must run with `NODE_ENV=production`
+   (Vercel does this by default; do not override it — a non-production value
+   breaks the Next.js build).
+6. **Backfill history** (optional) once credentials are live:
    ```bash
-   docker-compose up -d
+   pnpm ingest:backfill --client gnosis --platform discourse --days 90
    ```
+7. **Generate the first artefacts**: `pnpm scoring:run --client gnosis`,
+   `pnpm context:synthesise`/`context:activate`, `pnpm digest:run --client gnosis`.
 
-4. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
+## Production environment variables
 
-5. Run database migrations:
-   ```bash
-   pnpm --filter @attrakt/core db:migrate
-   ```
+**Required (non-secret):**
 
-6. Enable TimescaleDB hypertables:
-   ```sql
-   -- Connect to PostgreSQL
-   psql -U attrakt -d attrakt
+- `DATABASE_URL` — managed Postgres connection string
+- `REDIS_URL` — Upstash Redis connection string
+- `NODE_ENV=production`
+- `PORT`, `GITHUB_WEBHOOK_PORT`
 
-   -- Enable TimescaleDB extension
-   CREATE EXTENSION IF NOT EXISTS timescaledb;
+**Required secrets** (store in the host's secret manager, never in the repo):
 
-   -- Convert tables to hypertables
-   SELECT create_hypertable('messages', 'created_at');
-   SELECT create_hypertable('events', 'created_at');
-   SELECT create_hypertable('metrics', 'created_at');
-   ```
+- `ANTHROPIC_API_KEY` — Claude (model id is centralised in code: `claude-sonnet-4-6`)
+- `GITHUB_WEBHOOK_SECRET` — verifies inbound webhook signatures
+- `DISCORD_BOT_TOKEN` — Discord gateway
+- `GITHUB_TOKEN` (or App credentials) — GitHub reads/backfill
+- `DISCOURSE_API_KEY`, `DISCOURSE_API_USERNAME` — optional; Discourse reads (or set per client in `PlatformConfig.credentials`)
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `CLIENT_EMAIL` — digest email delivery
+- `ADMIN_PASSWORD` — shared-secret gate for the dashboard (Clerk slots in later)
+- `SLACK_WEBHOOK_URL` — optional alerts
 
-7. Start development servers:
-   ```bash
-   # Terminal 1: API server
-   pnpm --filter @attrakt/api dev
+See `.env.example` for the full annotated list. Per-tenant platform IDs and
+credentials live in `PlatformConfig` (set via `client:create`), not in env.
 
-   # Terminal 2: Discord bot
-   pnpm --filter @attrakt/mcp-servers run discord-bot
+## CI
 
-   # Terminal 3: Discord worker
-   pnpm --filter @attrakt/mcp-servers run discord-worker
+`.github/workflows/ci.yml` runs on every push and PR:
 
-   # Terminal 4: GitHub webhook receiver
-   pnpm --filter @attrakt/mcp-servers run github-webhook
+- **checks:** type-check (core + admin) and the production admin build; lint runs
+  advisory-only (the shared eslint ruleset/plugin needs a follow-up).
+- **test:** unit tests, the multi-tenancy integration tests, and the critical-path
+  smoke test against real Postgres + Redis service containers.
 
-   # Terminal 5: GitHub worker
-   pnpm --filter @attrakt/mcp-servers run github-worker
+> Known follow-up: a repo-wide `pnpm type-check`/`pnpm lint` still has
+> pre-existing cross-package `rootDir` and eslint-plugin issues; CI scopes to the
+> green, meaningful checks until that debt is paid down.
 
-   # Terminal 6: Twitter polling
-   pnpm --filter @attrakt/mcp-servers run twitter-polling
+## Database backup & restore
 
-   # Terminal 7: Twitter worker
-   pnpm --filter @attrakt/mcp-servers run twitter-worker
-
-   # Terminal 8: Community Pulse Agent
-   pnpm --filter @attrakt/agents run pulse-agent
-
-   # Terminal 9: Threat Detection Agent
-   pnpm --filter @attrakt/agents run threat-agent
-
-   # Terminal 10: Admin dashboard
-   pnpm --filter @attrakt/admin dev
-   ```
-
-## Production Deployment (Railway)
-
-1. Install Railway CLI:
-   ```bash
-   npm i -g @railway/cli
-   ```
-
-2. Login to Railway:
-   ```bash
-   railway login
-   ```
-
-3. Create a new project:
-   ```bash
-   railway init
-   ```
-
-4. Add PostgreSQL service:
-   ```bash
-   railway add postgresql
-   ```
-
-5. Add Redis service:
-   ```bash
-   railway add redis
-   ```
-
-6. Set environment variables in Railway dashboard or via CLI:
-   ```bash
-   railway variables set DATABASE_URL=${{Postgres.DATABASE_URL}}
-   railway variables set REDIS_URL=${{Redis.REDIS_URL}}
-   # ... set other environment variables
-   ```
-
-7. Deploy services:
-   - Deploy API server
-   - Deploy Discord bot (as worker)
-   - Deploy GitHub webhook receiver
-   - Deploy Twitter polling service
-   - Deploy agents (Community Pulse, Threat Detection)
-   - Deploy admin dashboard
-
-## Environment Variables
-
-See `.env.example` for all required environment variables.
-
-Key variables:
-- `DATABASE_URL`: PostgreSQL connection string
-- `REDIS_URL`: Redis connection string
-- `DISCORD_BOT_TOKEN`: Discord bot token
-- `GITHUB_TOKEN`: GitHub personal access token or app credentials
-- `TWITTER_BEARER_TOKEN`: Twitter API bearer token
-- `ANTHROPIC_API_KEY`: Claude API key
-- `SLACK_WEBHOOK_URL`: Slack webhook for alerts
-- `RESEND_API_KEY`: Resend API key for email delivery
+- **Backups:** use the managed provider's automated daily backups + point-in-time
+  recovery (Railway Postgres / your managed PG). No app-level backup job is
+  needed.
+- **Restore procedure:** provision a new Postgres instance from the latest
+  snapshot (or PITR to a timestamp), point `DATABASE_URL` at it, run
+  `prisma migrate deploy` to confirm schema parity, and restart the services.
+  Verify with the `/[clientSlug]/status` page and a `GET /health` on the API.
+- **Confidentiality & encryption:** backups now contain **client-confidential
+  knowledge documents** (`KnowledgeDocument`, `ContextProfile`). Encryption at
+  rest **must be confirmed enabled with the provider** for both the primary
+  database and its backups. See `docs/DATA_HANDLING.md`.
 
 ## Monitoring
 
-- Health checks: `GET /health` on API server
-- Queue dashboard: `http://localhost:3001/admin/queues`
-- Database: Use Prisma Studio (`pnpm --filter @attrakt/core db:studio`)
-
-## Scaling
-
-- API server: Scale horizontally behind load balancer
-- Workers: Scale based on queue depth
-- Agents: One instance per agent type recommended
-- Database: Use read replicas for analytics queries
-- Redis: Use Redis Cluster for high availability
+- API health: `GET /health`
+- Queue dashboard: `/admin/queues` (Bull-Board) on the API service
+- Ingestion health: the `/[clientSlug]/status` page (last successful run, items
+  ingested, error count per platform)
