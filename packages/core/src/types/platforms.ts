@@ -105,3 +105,24 @@ export interface TwitterFollowerCountPayload {
   tweetCount: number;
   timestamp: number;
 }
+
+/** A single Discourse post (topic OP or reply) queued for ingestion. */
+export interface DiscoursePostPayload {
+  baseUrl: string;
+  postId: number;
+  topicId: number;
+  topicTitle: string;
+  postNumber: number; // 1 = topic's opening post
+  userId: number;
+  username: string;
+  displayName?: string | null;
+  content: string; // plain text (HTML stripped)
+  createdAt: string;
+  replyCount: number;
+  acceptedAnswer: boolean;
+  categoryId: number | null;
+  categorySlug?: string | null;
+  isGovernance: boolean;
+  /** Explicit external accounts from the author's profile (high-confidence). */
+  linkedAccounts?: Array<{ platform: 'DISCORD' | 'GITHUB' | 'TWITTER'; username?: string }>;
+}

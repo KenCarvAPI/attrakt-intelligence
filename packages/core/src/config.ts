@@ -33,6 +33,15 @@ const ConfigSchema = z.object({
   twitterTrackedAccounts: z.string().default(''),
   twitterPollIntervalMs: z.coerce.number().default(900000),
 
+  // Discourse
+  // baseUrl is per-client (PlatformConfig.config.baseUrl); the API key/username
+  // can be set per-client (PlatformConfig.credentials) or globally here.
+  discourseApiKey: z.string().optional(),
+  discourseApiUsername: z.string().optional(),
+  discoursePollIntervalMs: z.coerce.number().default(900000),
+  // Comma-separated category slugs treated as governance (e.g. "governance,proposals").
+  discourseGovernanceCategories: z.string().default('governance,proposals,dao'),
+
   // Anthropic (Claude)
   anthropicApiKey: z.string().optional(),
   // Single source of truth for the Claude model used across all agents.
@@ -82,6 +91,10 @@ function loadConfig(): Config {
       twitterClientSecret: process.env.TWITTER_CLIENT_SECRET,
       twitterTrackedAccounts: process.env.TWITTER_TRACKED_ACCOUNTS,
       twitterPollIntervalMs: process.env.TWITTER_POLL_INTERVAL_MS,
+      discourseApiKey: process.env.DISCOURSE_API_KEY,
+      discourseApiUsername: process.env.DISCOURSE_API_USERNAME,
+      discoursePollIntervalMs: process.env.DISCOURSE_POLL_INTERVAL_MS,
+      discourseGovernanceCategories: process.env.DISCOURSE_GOVERNANCE_CATEGORIES,
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       claudeModel: process.env.CLAUDE_MODEL,
       slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
