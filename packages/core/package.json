@@ -13,19 +13,31 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
     "member:merge": "tsx src/scripts/merge-member.ts",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "member:exclude": "tsx src/scripts/member-exclude.ts",
+    "client:create": "tsx src/scripts/client-create.ts",
+    "knowledge:add": "tsx scripts/knowledge-add.ts",
+    "test": "vitest run && pnpm test:integration",
+    "test:watch": "vitest",
+    "test:integration": "node --import tsx --test src/services/merge-member.test.ts src/services/tenant-isolation.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0",
+    "discord.js": "^14.14.1",
+    "octokit": "^3.1.2",
+    "dotenv": "^16.4.5",
+    "pdfjs-dist": "^6.0.227",
     "pino": "^8.17.2",
     "pino-pretty": "^10.3.1",
+    "twitter-api-v2": "^1.15.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "prisma": "^5.9.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.8"
   }
 }

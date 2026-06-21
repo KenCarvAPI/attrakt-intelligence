@@ -18,6 +18,9 @@
     "twitter-mcp": "tsx src/twitter-mcp/index.ts",
     "twitter-polling": "tsx src/twitter-polling/index.ts",
     "twitter-worker": "tsx src/twitter-bot/index-worker.ts",
+    "discourse-polling": "tsx src/discourse-polling/index.ts",
+    "discourse-worker": "tsx src/discourse-bot/index-worker.ts",
+    "ingest:backfill": "tsx src/backfill/index.ts",
     "analytics-mcp": "tsx src/analytics-mcp/index.ts",
     "protection-mcp": "tsx src/protection-mcp/index.ts"
   },

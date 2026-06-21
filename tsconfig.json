@@ -24,9 +24,12 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
+      "@attrakt/core": ["packages/core/src/index.ts"],
       "@attrakt/core/*": ["packages/core/src/*"],
       "@attrakt/mcp-servers/*": ["packages/mcp-servers/src/*"],
+      "@attrakt/agents": ["packages/agents/src/index.ts"],
       "@attrakt/agents/*": ["packages/agents/src/*"],
+      "@attrakt/api": ["packages/api/src/index.ts"],
       "@attrakt/api/*": ["packages/api/src/*"]
     },
     "esModuleInterop": true,

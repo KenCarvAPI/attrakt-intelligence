@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Single dark theme — restrained, premium. Near-black canvas, off-white text,
+ * one cool accent (indigo). No light mode: this is a sales-demo surface.
+ */
+@layer base {
+  :root {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 95%;
+
+    --card: 240 8% 6.5%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 240 9% 7%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 234 89% 74%;
+    --primary-foreground: 240 10% 6%;
+
+    --secondary: 240 5% 13%;
+    --secondary-foreground: 0 0% 92%;
+
+    --muted: 240 5% 12%;
+    --muted-foreground: 240 5% 58%;
+
+    --accent: 240 5% 14%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 14%;
+    --input: 240 5% 16%;
+    --ring: 234 89% 74%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Subtle, premium scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(240 5% 18%);
+    border-radius: 9999px;
+    border: 3px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(240 5% 24%);
+  }
+}
+
+/* Faint top-lit radial wash behind the canvas for depth. */
+.app-wash {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, hsl(234 60% 16% / 0.25), transparent 70%),
+    hsl(var(--background));
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

@@ -18,16 +18,52 @@ model Client {
   id          String   @id @default(cuid())
   name        String
   slug        String   @unique
+  // Workers and schedulers iterate over active clients only. Provisioning a
+  // client sets this true; flip it false to pause all processing for a tenant
+  // without deleting their data.
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  members          Member[]
-  platformConfigs  PlatformConfig[]
-  metrics          Metric[]
-  threats          Threat[]
+  members                Member[]
+  platformConfigs        PlatformConfig[]
+  metrics                Metric[]
+  threats                Threat[]
+  advocateScores         AdvocateScore[]
+  scoringConfig          ScoringConfig?
+  advocateBriefs         AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
+  knowledgeDocuments     KnowledgeDocument[]
+  contextProfiles        ContextProfile[]
+  campaignBriefs         CampaignBrief[]
+  weeklyDigests          WeeklyDigest[]
+  ingestionRuns          IngestionRun[]
 
+  @@index([active])
   @@map("clients")
+}
+
+// One row per ingestion run (live poll cycle or backfill chunk-set), per client
+// and platform. Backs the dashboard status page (last successful run, items
+// ingested, error count per platform) and makes backfills resumable via cursor.
+model IngestionRun {
+  id            String    @id @default(cuid())
+  clientId      String
+  platform      Platform
+  mode          String    @default("live") // "live" | "backfill"
+  status        String    @default("running") // "running" | "success" | "failed"
+  itemsIngested Int       @default(0)
+  errorCount    Int       @default(0)
+  cursor        Json?     // resumable, platform-specific (e.g. { page, lastTimestamp })
+  error         String?
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, platform, startedAt])
+  @@map("ingestion_runs")
 }
 
 model PlatformConfig {
@@ -50,6 +86,7 @@ enum Platform {
   DISCORD
   GITHUB
   TWITTER
+  DISCOURSE
 }
 
 model Member {
@@ -70,14 +107,23 @@ model Member {
   deletedAt    DateTime?
   mergedIntoId String?
 
+  // Opt-out: excluded members are skipped by scoring, briefs, and digests. Used
+  // for individual data-handling opt-outs (see docs/DATA_HANDLING.md).
+  excluded       Boolean @default(false)
+  excludedReason String?
+
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   platformIdentities PlatformIdentity[]
   messages          Message[]
   events            Event[]
+  advocateScores    AdvocateScore[]
+  advocateBriefs    AdvocateBrief[]
+  helpfulnessEvaluations HelpfulnessEvaluation[]
 
   @@index([clientId])
   @@index([email])
   @@index([deletedAt])
+  @@index([clientId, excluded])
   @@map("members")
 }
 
@@ -135,10 +181,16 @@ model Event {
   platform     Platform
   eventType    EventType
   eventData    Json     @default("{}")
+  // Idempotency key derived from platform-native identifiers (e.g. commit sha,
+  // "pr:123:merged", "discourse-post-9:created"). Lets ingestion/backfill upsert
+  // events so duplicate webhook delivery or a re-run never double-writes. Nullable
+  // for legacy/unkeyed events; Postgres allows multiple NULLs under a unique index.
+  dedupeKey    String?
   createdAt    DateTime @default(now())
 
   member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
+  @@unique([platform, dedupeKey])
   @@index([clientId, createdAt])
   @@index([memberId])
   @@index([eventType])
@@ -169,6 +221,12 @@ enum EventType {
   LIKE
   FOLLOW
   UNFOLLOW
+  GOVERNANCE_POST
+  GOVERNANCE_VOTE
+  GOVERNANCE_PROPOSAL
+  DISCOURSE_TOPIC_CREATED
+  DISCOURSE_POST_CREATED
+  DISCOURSE_SOLUTION_ACCEPTED
 }
 
 model Metric {
@@ -247,4 +305,216 @@ enum ThreatStatus {
   ACTIONED
   RESOLVED
   FALSE_POSITIVE
+}
+
+// ---------------------------------------------------------------------------
+// Advocate scoring
+//
+// AdvocateScore stores, per member and per period (ISO week, e.g. "2026-W24"),
+// the composite advocacy score and its individual components. ScoringConfig
+// holds the per-client weighting applied to each component when computing the
+// composite. See packages/core/src/scoring for the maths.
+// ---------------------------------------------------------------------------
+
+model AdvocateScore {
+  id               String          @id @default(cuid())
+  memberId         String
+  clientId         String
+  period           String          // ISO week, e.g. "2026-W24"
+  compositeScore   Float           // weighted, normalised 0-100
+  activityScore    Float           // log-scaled message + event volume
+  consistencyScore Float           // distinct active days over trailing 90d
+  breadthScore     Float           // distinct platforms the member is active on
+  influenceScore   Float           // engagement received relative to messages sent
+  helpfulnessScore Float           @default(0) // Claude-evaluated, stubbed at 0
+  segment          AdvocateSegment // percentile-derived bucket per client
+  metadata         Json?           @default("{}")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, period])
+  @@index([clientId, period])
+  @@index([clientId, segment])
+  @@index([clientId, period, compositeScore])
+  @@map("advocate_scores")
+}
+
+enum AdvocateSegment {
+  CHAMPION // top 5%
+  ADVOCATE // next 15%
+  ACTIVE   // next 30%
+  CASUAL   // next 30%
+  LURKER   // remainder
+}
+
+model ScoringConfig {
+  id                String   @id @default(cuid())
+  clientId          String   @unique
+  // Component weights. Defaults are sensible starting points and are
+  // normalised at compute time so they need not sum to exactly 1.
+  activityWeight    Float    @default(0.25)
+  consistencyWeight Float    @default(0.20)
+  breadthWeight     Float    @default(0.15)
+  influenceWeight   Float    @default(0.30)
+  helpfulnessWeight Float    @default(0.10)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("scoring_configs")
+}
+
+// Cache of the Claude-evaluated helpfulness component, keyed per member per
+// period. Populated by the scoring agent (which has the Anthropic client) and
+// read back by the core scoring pipeline so the maths stays Claude-free.
+model HelpfulnessEvaluation {
+  id           String   @id @default(cuid())
+  memberId     String
+  clientId     String
+  period       String   // ISO week, e.g. "2026-W24"
+  score        Float    // 0-100, as rated by Claude
+  rationale    String?  // short justification returned alongside the score
+  sampleSize   Int      @default(0) // number of messages sampled
+  model        String   // Claude model used
+  promptVersion String  // versioned prompt template id
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, period])
+  @@index([clientId, period])
+  @@map("helpfulness_evaluations")
+}
+
+// A Claude-generated advocate brief: a structured profile of a member used by
+// the community team. The brief itself is stored as JSON; metadata captures how
+// it was produced so briefs can be regenerated and compared over time.
+model AdvocateBrief {
+  id              String   @id @default(cuid())
+  memberId        String
+  clientId        String
+  brief           Json     // structured brief (see packages/agents/src/scoring-agent/briefs.ts)
+  model           String   // Claude model used
+  promptVersion   String   // versioned prompt template id
+  contextProfileUsed Boolean @default(false) // whether a client Context Profile grounded the brief
+  createdAt       DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+  @@index([clientId, createdAt])
+  @@map("advocate_briefs")
+}
+
+// ============================================================================
+// Internal Knowledge Layer
+//
+// Captures what a client's products do, how their brand exists, what their
+// marketing function looks like, and strategic direction from leadership.
+// Sits alongside the community ingestion pipelines. MVP intake is upload and
+// paste only (no Notion/Drive/Slack connectors yet).
+// ============================================================================
+
+model KnowledgeDocument {
+  id          String              @id @default(cuid())
+  clientId    String
+  title       String
+  sourceType  KnowledgeSourceType
+  rawText     String
+  charCount   Int                 @default(0) // length of stored rawText
+  contentHash String              // sha256 of original text, used for dedupe
+  truncated   Boolean             @default(false)
+  uploadedAt  DateTime            @default(now())
+  metadata    Json?               @default("{}")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Dedupe identical content per client
+  @@unique([clientId, contentHash])
+  @@index([clientId, sourceType])
+  @@map("knowledge_documents")
+}
+
+enum KnowledgeSourceType {
+  product_docs
+  brand_guidelines
+  marketing_material
+  leadership_interview
+  strategy_doc
+  website
+  other
+}
+
+model ContextProfile {
+  id       String               @id @default(cuid())
+  clientId String
+  version  Int                  @default(1)
+  status   ContextProfileStatus @default(draft)
+
+  // Structured sections stored as JSON. Populated by synthesis (next prompt).
+  products           Json @default("{}") // what they are, who they serve, key differentiators
+  brandVoice         Json @default("{}") // tone, vocabulary, things they never say
+  audience           Json @default("{}") // ICPs, communities, where they live online
+  marketingFunction  Json @default("{}") // team shape, channels in use, current campaigns
+  strategicDirection Json @default("{}") // leadership priorities, positioning, upcoming bets
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // One profile per (client, version). A partial unique index enforcing a
+  // single ACTIVE profile per client is added in the migration (Prisma cannot
+  // express partial unique indexes in the schema).
+  @@unique([clientId, version])
+  @@index([clientId, status])
+  @@map("context_profiles")
+}
+
+enum ContextProfileStatus {
+  draft
+  active
+  archived
+}
+
+// Weekly ecosystem health report produced by the pulse-agent, grounded in the
+// client's active ContextProfile. Stored as structured JSON plus rendered
+// Markdown so it can be re-displayed or re-sent without regeneration.
+model WeeklyDigest {
+  id        String   @id @default(cuid())
+  clientId  String
+  period    String   // ISO week, e.g. "2026-W24"
+  content   Json     @default("{}") // structured digest (headline, movements, advocates, ...)
+  markdown  String   // rendered Markdown
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, period])
+  @@index([clientId, createdAt])
+  @@map("weekly_digests")
+}
+
+// Campaign brief — bridges the internal knowledge layer (ContextProfile) and
+// the community intelligence pillar (advocates / channels from ingestion data).
+model CampaignBrief {
+  id        String   @id @default(cuid())
+  clientId  String
+  objective String
+  content   Json     @default("{}") // structured brief (segments, advocates, channels, angles)
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("campaign_briefs")
 }

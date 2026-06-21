@@ -1,0 +1,14 @@
+GNOSIS BRAND GUIDELINES
+
+Tone: clear, technical, understated. We speak like engineers who respect the
+reader's intelligence. We are calm and precise, never hype-driven.
+
+Vocabulary we use: self-custody, on-chain, credibly neutral, infrastructure,
+settlement, open source.
+
+Things we never say:
+- "To the moon", "wagmi", or any price-pump language.
+- Guarantees of returns or yield.
+- "Trustless" used loosely — we say "self-custodial" or "non-custodial".
+
+Voice in one line: infrastructure for a credibly neutral financial system.
