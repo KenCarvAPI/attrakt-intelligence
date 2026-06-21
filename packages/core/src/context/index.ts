@@ -14,3 +14,7 @@ export * from './query';
 export * from './sync';
 export * from './connectors/types';
 export * from './connectors/registry';
+export * from './connectors/builtin';
+export * from './connectors/github-product';
+export * from './connectors/linear';
+export * from './connectors/community';

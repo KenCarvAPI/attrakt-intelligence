@@ -19,6 +19,7 @@
     "client:create": "tsx src/scripts/client-create.ts",
     "knowledge:add": "tsx scripts/knowledge-add.ts",
     "context:backfill": "tsx scripts/context-backfill.ts",
+    "context:sync": "tsx scripts/context-sync.ts",
     "test": "vitest run && pnpm test:integration",
     "test:watch": "vitest",
     "test:integration": "node --import tsx --test src/services/merge-member.test.ts src/services/tenant-isolation.test.ts"

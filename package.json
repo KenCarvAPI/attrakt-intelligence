@@ -18,6 +18,7 @@
     "seed:demo": "pnpm --filter @attrakt/core seed:demo",
     "knowledge:add": "tsx packages/core/scripts/knowledge-add.ts",
     "context:backfill": "pnpm --filter @attrakt/core context:backfill",
+    "context:sync": "pnpm --filter @attrakt/core context:sync",
     "context:synthesise": "tsx packages/agents/scripts/context-synthesise.ts",
     "context:activate": "tsx packages/agents/scripts/context-activate.ts",
     "campaign:brief": "tsx packages/agents/scripts/campaign-brief.ts",

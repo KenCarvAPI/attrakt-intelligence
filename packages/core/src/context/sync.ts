@@ -12,6 +12,7 @@ import type { ContextSource } from '@prisma/client';
 import { prisma } from '../prisma';
 import { log } from '../logger';
 import { getConnector } from './connectors/registry';
+import { ensureBuiltinConnectorsRegistered } from './connectors/builtin';
 import { upsertContextItem } from './store';
 
 export interface SyncResult {
@@ -33,6 +34,7 @@ export async function runSync(sourceId: string, opts: { since?: Date } = {}): Pr
   const source = await prisma.contextSource.findUnique({ where: { id: sourceId } });
   if (!source) throw new Error(`ContextSource not found: ${sourceId}`);
 
+  ensureBuiltinConnectorsRegistered();
   const connector = getConnector(source.connector);
   if (!connector) throw new Error(`No connector registered for "${source.connector}"`);
 

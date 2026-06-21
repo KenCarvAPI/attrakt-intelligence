@@ -293,8 +293,8 @@ Postgres). OpenAI as an alternative adapter.
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **CE-0 Foundation** ✅ | Structured store (`ContextSource`/`ContextItem`/`ContextChunk`/`ContextSyncRun`), embeddings + retrieval, in-house connector framework, refactor manual `KnowledgeDocument` into the store, switch grounding from wholesale → retrieval-augmented | **Done 2026-06-21.** Existing features keep working, now retrieval-based. (Community-data projection into items deferred into CE-1 alongside the first connectors.) |
-| **CE-1 Product pipeline (Domain B)** | GitHub product extraction + **Linear** | "Product updates across the org" (matches the reference client's in-testing pipeline) |
+| **CE-0 Foundation** ✅ | Structured store (`ContextSource`/`ContextItem`/`ContextChunk`/`ContextSyncRun`), embeddings + retrieval, in-house connector framework, refactor manual `KnowledgeDocument` into the store, switch grounding from wholesale → retrieval-augmented | **Done 2026-06-21.** Existing features keep working, now retrieval-based. (Community-data projection landed in CE-1 via the `community` connector.) |
+| **CE-1 Product pipeline (Domain B)** ✅ | GitHub product extraction (releases + merged PRs) + **Linear** (issues/projects) + the deferred **community** projection (Messages → COMMUNITY items) | **Done 2026-06-21.** Three connectors behind the in-house framework (`github_product`, `linear`, `community`), registered via `ensureBuiltinConnectorsRegistered()`, runnable via `pnpm context:sync --source <id>`. Pure normalizers unit-tested against fixtures (live egress restricted in this env). |
 | **CE-2 Strategy & ops (A + D)** | Notion + Google Drive/Docs + Airtable + Calendar | Strategy/brand store + marketing activity feed |
 | **CE-3 Performance (Domain E)** | GA4 + Google Ads + Meta Ads + social analytics | Quantitative grounding & performance summaries |
 | **CE-4 Research & long tail** | Dovetail/surveys, governance (Snapshot/Tally), RSS/news, more community surfaces | Full coverage |
