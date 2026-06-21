@@ -1,9 +1,9 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { prisma, resolveIdentity, log, IngestionError, isRetryableError } from '@attrakt/core';
-import { calculateBasicSentiment } from '@attrakt/core/src/utils/sentiment';
-import type { JobData, IngestDiscourseJobData } from '@attrakt/api/src/queues/types';
-import type { DiscoursePostPayload } from '@attrakt/core/src/types/platforms';
+import { calculateBasicSentiment } from '@attrakt/core';
+import type { JobData, IngestDiscourseJobData } from '@attrakt/api';
+import type { DiscoursePostPayload } from '@attrakt/core';
 
 /**
  * Discourse ingestion worker.
@@ -52,7 +52,12 @@ function eventTypeFor(payload: DiscoursePostPayload) {
   return 'DISCOURSE_POST_CREATED' as const;
 }
 
-export async function processPost(payload: DiscoursePostPayload, clientId: string) {
+/**
+ * Ingest one Discourse post. Returns true when a new Message+Event were written,
+ * false when the post was already ingested (idempotent skip) — so callers like
+ * the backfill can count actual persists rather than attempts.
+ */
+export async function processPost(payload: DiscoursePostPayload, clientId: string): Promise<boolean> {
   const logger = log.child({ clientId, platform: 'DISCOURSE', event: 'post' });
   const platformMessageId = `discourse-post-${payload.postId}`;
 
@@ -63,7 +68,7 @@ export async function processPost(payload: DiscoursePostPayload, clientId: strin
   });
   if (existing) {
     logger.debug({ postId: payload.postId }, 'Discourse post already ingested; skipping');
-    return;
+    return false;
   }
 
   // Resolve the author. Explicit GitHub/Discord links on the Discourse profile
@@ -128,4 +133,5 @@ export async function processPost(payload: DiscoursePostPayload, clientId: strin
     { postId: payload.postId, topicId: payload.topicId, eventType: eventTypeFor(payload), governance: payload.isGovernance },
     'Discourse post ingested'
   );
+  return true;
 }

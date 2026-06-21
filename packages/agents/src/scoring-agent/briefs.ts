@@ -48,8 +48,9 @@ export interface GeneratedBrief {
 
 /** Gather and format the member data that grounds the brief. */
 async function gatherBriefInputs(clientId: string, memberId: string, sampleSize: number) {
+  // Excluded (opted-out) and merged members do not get briefs.
   const member = await prisma.member.findFirst({
-    where: { id: memberId, clientId },
+    where: { id: memberId, clientId, deletedAt: null, excluded: false },
     include: { platformIdentities: true },
   });
   if (!member) {

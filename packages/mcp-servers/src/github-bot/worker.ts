@@ -1,12 +1,12 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { prisma, resolveIdentity, log, IngestionError, isRetryableError } from '@attrakt/core';
-import type { JobData, IngestGitHubJobData } from '@attrakt/api/src/queues/types';
+import type { JobData, IngestGitHubJobData } from '@attrakt/api';
 import type {
   GitHubPushPayload,
   GitHubPullRequestPayload,
   GitHubIssuePayload,
-} from '@attrakt/core/src/types/platforms';
+} from '@attrakt/core';
 
 /**
  * GitHub ingestion worker
@@ -255,21 +255,25 @@ async function processIssueComment(payload: any, clientId: string) {
     // Use centralized identity resolution
     const { memberId } = await resolveIdentity(clientId, 'GITHUB', authorId.toString(), author);
 
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'GITHUB',
-        eventType: 'ISSUE_COMMENT',
-        eventData: {
-          commentId: comment.id,
-          body: comment.body,
-          url: comment.html_url,
-          repository: payload.repository?.full_name,
-          issueNumber: payload.issue?.number,
+    await prisma.event.createMany({
+      data: [
+        {
+          clientId,
+          memberId,
+          platform: 'GITHUB',
+          eventType: 'ISSUE_COMMENT',
+          dedupeKey: `gh-comment:${comment.id}`,
+          eventData: {
+            commentId: comment.id,
+            body: comment.body,
+            url: comment.html_url,
+            repository: payload.repository?.full_name,
+            issueNumber: payload.issue?.number,
+          },
+          createdAt: new Date(comment.created_at || Date.now()),
         },
-        createdAt: new Date(comment.created_at || Date.now()),
-      },
+      ],
+      skipDuplicates: true,
     });
 
     logger.debug({ memberId, commentId: comment.id }, 'Issue comment event created');
@@ -301,18 +305,22 @@ async function processStar(payload: any, clientId: string) {
     // Use centralized identity resolution
     const { memberId } = await resolveIdentity(clientId, 'GITHUB', authorId.toString(), author);
 
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'GITHUB',
-        eventType: 'STAR',
-        eventData: {
-          repository: payload.repository?.full_name,
-          action: payload.action, // 'created' or 'deleted'
+    await prisma.event.createMany({
+      data: [
+        {
+          clientId,
+          memberId,
+          platform: 'GITHUB',
+          eventType: 'STAR',
+          dedupeKey: `gh-star:${payload.repository?.full_name ?? ''}:${authorId}`,
+          eventData: {
+            repository: payload.repository?.full_name,
+            action: payload.action, // 'created' or 'deleted'
+          },
+          createdAt: new Date(payload.repository?.updated_at || Date.now()),
         },
-        createdAt: new Date(payload.repository?.updated_at || Date.now()),
-      },
+      ],
+      skipDuplicates: true,
     });
 
     logger.debug({ memberId, repository: payload.repository?.full_name }, 'Star event created');
@@ -344,18 +352,22 @@ async function processFork(payload: any, clientId: string) {
     // Use centralized identity resolution
     const { memberId } = await resolveIdentity(clientId, 'GITHUB', authorId.toString(), author);
 
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'GITHUB',
-        eventType: 'FORK',
-        eventData: {
-          repository: fork.full_name,
-          forkedFrom: payload.repository?.full_name,
+    await prisma.event.createMany({
+      data: [
+        {
+          clientId,
+          memberId,
+          platform: 'GITHUB',
+          eventType: 'FORK',
+          dedupeKey: `gh-fork:${payload.repository?.full_name ?? ''}:${authorId}`,
+          eventData: {
+            repository: fork.full_name,
+            forkedFrom: payload.repository?.full_name,
+          },
+          createdAt: new Date(fork.created_at || Date.now()),
         },
-        createdAt: new Date(fork.created_at || Date.now()),
-      },
+      ],
+      skipDuplicates: true,
     });
 
     logger.debug({ memberId, repository: fork.full_name }, 'Fork event created');

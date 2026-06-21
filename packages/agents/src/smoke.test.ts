@@ -5,6 +5,8 @@ import {
   resolveIdentity,
   computeAdvocateScores,
   ingestKnowledgeDocument,
+  setMemberExcluded,
+  SCORABLE_MEMBER_WHERE,
   toPeriod,
 } from '@attrakt/core';
 import { synthesiseContextProfile, activateContextProfile } from './context-agent/index';
@@ -88,4 +90,12 @@ test('critical path: ingest -> identity -> score -> context -> members API shape
   assert.equal(row.id, memberId);
   assert.ok(row.platformIdentities.length >= 1, 'member has a linked platform identity');
   assert.ok(row.advocateScores[0]?.segment, 'member row carries a composite score + segment');
+
+  // 6. Opt-out: an excluded member is filtered from advocacy outputs everywhere
+  // (scoring/briefs/digests/campaigns all share SCORABLE_MEMBER_WHERE).
+  await setMemberExcluded(clientId, memberId, true, 'smoke opt-out');
+  const scorable = await prisma.member.findMany({ where: { clientId, ...SCORABLE_MEMBER_WHERE } });
+  assert.equal(scorable.length, 0, 'excluded member must not appear in scorable-member queries');
+  const rescored = await computeAdvocateScores(clientId);
+  assert.equal(rescored.membersScored, 0, 'excluded member must not be scored');
 });

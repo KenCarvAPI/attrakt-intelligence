@@ -1,8 +1,8 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { prisma, resolveIdentity, log, IngestionError, isRetryableError } from '@attrakt/core';
-import type { JobData, IngestTwitterJobData } from '@attrakt/api/src/queues/types';
-import type { TwitterMentionPayload, TwitterFollowerCountPayload } from '@attrakt/core/src/types/platforms';
+import type { JobData, IngestTwitterJobData } from '@attrakt/api';
+import type { TwitterMentionPayload, TwitterFollowerCountPayload } from '@attrakt/core';
 
 /**
  * Twitter ingestion worker

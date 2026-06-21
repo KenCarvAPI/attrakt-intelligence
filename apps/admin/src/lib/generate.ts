@@ -34,8 +34,9 @@ function topTopics(texts: string[], n = 4): string[] {
 
 // --- Advocate brief ---------------------------------------------------------
 export async function regenerateBrief(clientId: string, memberId: string) {
+  // Excluded (opted-out) and merged members do not get briefs.
   const member = await prisma.member.findFirst({
-    where: { id: memberId, clientId },
+    where: { id: memberId, clientId, deletedAt: null, excluded: false },
     include: {
       platformIdentities: true,
       advocateScores: { orderBy: { period: 'desc' }, take: 1 },
@@ -204,8 +205,9 @@ export async function generateCampaign(clientId: string, objective: string) {
     orderBy: { version: 'desc' },
   });
 
+  // Exclude merged and opted-out members from campaign advocate selection.
   const members = await prisma.member.findMany({
-    where: { clientId, deletedAt: null },
+    where: { clientId, deletedAt: null, excluded: false },
     include: {
       platformIdentities: { select: { platform: true, username: true } },
       advocateScores: { orderBy: { period: 'desc' }, take: 1 },

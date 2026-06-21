@@ -7,7 +7,7 @@ import cron from 'node-cron';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { prisma, config, log, getActiveClients } from '@attrakt/core';
 import { addJob } from '@attrakt/api';
-import type { AgentThreatScanJobData } from '@attrakt/api/src/queues/types';
+import type { AgentThreatScanJobData } from '@attrakt/api';
 
 if (!config.anthropicApiKey) {
   throw new Error('ANTHROPIC_API_KEY is required');

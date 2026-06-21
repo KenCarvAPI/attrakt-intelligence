@@ -1,7 +1,7 @@
 import { GatewayIntentBits, Events, Message, GuildMember } from 'discord.js';
 import { addJob, getDiscordClient, resolveClientIdByPlatform, config, log } from '@attrakt/core';
-import type { JobData } from '@attrakt/api/src/queues/types';
-import type { DiscordMessagePayload, DiscordMemberPayload, DiscordReactionPayload } from '@attrakt/core/src/types/platforms';
+import type { JobData } from '@attrakt/api';
+import type { DiscordMessagePayload, DiscordMemberPayload, DiscordReactionPayload } from '@attrakt/core';
 
 const client = getDiscordClient();
 

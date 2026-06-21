@@ -1,7 +1,7 @@
 import { createWorker } from '@attrakt/api';
 import { Job } from 'bullmq';
 import { processThreatScanJob } from './index';
-import type { JobData, AgentThreatScanJobData } from '@attrakt/api/src/queues/types';
+import type { JobData, AgentThreatScanJobData } from '@attrakt/api';
 import { log } from '@attrakt/core';
 
 /**
