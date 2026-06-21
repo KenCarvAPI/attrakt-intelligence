@@ -1,296 +1,267 @@
 # Attrakt — Site Map & UI Plan
 
 **Date:** 2026-06-21
-**Status:** Draft v2 (refined after scope decisions)
+**Status:** Draft v3 (reconciled with the active build)
 **Scope:** Information architecture, surfaces, navigation, and screen inventory
 for the Attrakt Community Intelligence Platform.
 
+This version is reconciled against the active build on branch
+`claude/gifted-shannon-2ryjzk` (the line carrying multi-tenancy, the Context
+Engine, advocate scoring, Discourse ingestion, and the admin dashboard). Where
+this plan previously diverged from what's being built, it has been corrected.
+Status markers: ✅ built · 🟡 partial / backend-only · ⬜ planned.
+
+---
+
+## 0. Reconciliation with the active build (read first)
+
+The product as actually built is **broader** than the original
+`PRODUCT_OVERVIEW.md` and than this plan's v1/v2. Two corrections matter most:
+
+1. **It's one multi-tenant app, not five subdomain apps.** The build is a single
+   Next.js dashboard (`apps/admin`) with **slug-based tenancy** — every screen
+   lives under `/[clientSlug]/…` and the tenant is switched by URL. Auth is a
+   shared-secret gate today, with a clearly marked **Clerk integration point**
+   (`apps/admin/src/lib/auth.ts`): "map Clerk orgs → clients for multi-tenant
+   access control." So the role/scope separation this plan describes will be
+   delivered via **Clerk orgs**, not separate apps (at least initially).
+
+2. **There are two product pillars; the original plan only covered one.**
+   - **Pillar A — Community & Advocate Intelligence:** monitor the community,
+     score advocates, surface segments and health. (The original product.)
+   - **Pillar B — Context Engine:** ingest a client's internal knowledge
+     (product docs, brand guidelines, leadership interviews, strategy) →
+     synthesize a **versioned context profile** → generate **campaign briefs**
+     and **advocate briefs** grounded in that context. This is a content/
+     activation pillar that this plan's earlier versions missed entirely. It is
+     the third nav tab in the live app today.
+
+### What's actually built vs. what this plan adds
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Multi-tenant app, slug routing (`/[clientSlug]`) | ✅ built | `apps/admin` |
+| Auth (shared-secret), Clerk planned | 🟡 partial | Clerk = future RBAC (orgs→clients) |
+| Nav: **Overview / Members / Context** | ✅ built | `nav-tabs.tsx` |
+| Overview: active/new members, messages, **governance posts**, activity chart, **segment distribution**, messages-by-platform | ✅ built | `[clientSlug]/page.tsx` |
+| Members directory + member panel (advocate score + advocate brief) | ✅ built | `members/`, `member-panel.tsx` |
+| **Context Engine** (knowledge intake → versioned profile → campaign brief) | ✅ built | `context/page.tsx`, `context-agent` |
+| Advocate scoring + segments (Champion→Lurker) | ✅ built | `AdvocateScore`, `scoring/score.ts` |
+| Helpfulness evaluation (Claude-scored) | ✅ built | `HelpfulnessEvaluation` |
+| Weekly digest / ecosystem health report | ✅ built | `WeeklyDigest`, `pulse-weekly-v1` |
+| Sources: Discord, GitHub, Twitter, **Discourse (governance)** | ✅ built | `Platform` enum + discourse-bot |
+| Threat detection | 🟡 backend-only | `Threat` model + agent exist; **no UI tab yet** |
+| Analytics tab (deep time-series) | ⬜ planned | only Overview charts today |
+| Reports/exports tab | ⬜ planned | digests delivered, no archive UI |
+| Settings tab (connections/team/alerts) | ⬜ planned | provisioning is operator/CLI today |
+| Ops Console (cross-tenant portfolio) | ⬜ planned | today: tenant-switch by slug |
+| System Admin app | ⬜ planned | backend ops via CLI scripts |
+| Advocate Portal (external) | ⬜ planned | confirmed in scope |
+| Developer Portal / Marketing site | ⬜ planned | roadmap |
+
 ### Decisions locked in (2026-06-21)
-
-- **Advocate Portal is in scope** as a distinct, external member-facing surface
-  (`advocates.attrakt.io`) — not folded into the client app.
-- **Onboarding is Attrakt-provisioned**, not self-serve. Attrakt connects a
-  client's platforms and configures the workspace via the Ops Console; the client
-  logs into a ready-to-use workspace. The client app therefore has **no
-  platform-connection wizard** — it has a guided first-run *tour* instead, and
-  platform connections are **read-only / request-a-change** for clients.
-- **Next step:** refine this plan (no wireframes or code yet).
-
-This plan is grounded in the existing data model (`Client`, `Member`,
-`PlatformIdentity`, `Message`, `Event`, `Metric`, `Threat`) and the working
-backend subsystems (ingestion, identity resolution, metrics, threat detection,
-pulse digests). The frontend today is a single stub page (`apps/admin`), so this
-is greenfield on the UI side.
+- **Advocate Portal** is in scope as a distinct external surface (⬜ not yet built).
+- **Onboarding is Attrakt-provisioned** — consistent with the live app, which is
+  operated as an internal/demo tool with data seeded/provisioned by operators
+  (`pnpm seed:demo`, `context-synthesise`, `knowledge-add` CLIs). Clients do not
+  self-connect platforms.
 
 ---
 
 ## 1. Audiences & roles
 
-You named three core audiences. Below they are formalized as **surfaces** (distinct
-apps/scopes) and **roles** (permission sets within a surface), plus the additional
-audiences I recommend adding.
+The three audiences you named map onto the **current single app** by tenant
+scope + (future) Clerk role, and onto **planned** dedicated surfaces later.
 
-### The three you named
+| # | Audience | Today (built) | Planned surface |
+|---|----------|---------------|-----------------|
+| 1 | **Client** | A tenant's `/[clientSlug]` view in the shared app | `app.attrakt.io` workspace, Clerk org = client |
+| 2 | **Attrakt oversight** | Operator switches tenants by slug; runs CLIs | `console.attrakt.io` cross-tenant Ops Console |
+| 3 | **Master admin** | CLI scripts (seed, synthesise, merge, metrics) | `admin.attrakt.io` System Admin app |
+| 4 | **Advocate / member** | — | `advocates.attrakt.io` external portal |
+| 5 | **Client sub-roles** (Owner / Community Mgr / Moderator / Viewer) | not enforced (single shared secret) | Clerk org roles |
+| 6 | **Developer / integrator** | — | `developers.attrakt.io` |
+| 7 | **Prospect / public** | — | `attrakt.io` marketing |
 
-| # | Audience | Surface | Scope | Primary job |
-|---|----------|---------|-------|-------------|
-| 1 | **Client** | Client Workspace | Single tenant | Onboard, monitor their community, find & nurture advocates |
-| 2 | **Attrakt oversight** | Ops Console | Cross-tenant | Drive community/ecosystem growth across the whole client portfolio |
-| 3 | **Master admin** | System Admin | Global / infra | Backend changes, provisioning, integrations, system health |
+**Implication:** RBAC is the gating dependency. Until Clerk lands, "client" vs.
+"oversight" is a soft distinction (same login, tenant by URL). The role matrix
+below is the target once Clerk orgs are wired.
 
-### Additional audiences I recommend (answering "Do you see any more?")
-
-| # | Audience | Surface | Why it matters |
-|---|----------|---------|----------------|
-| 4 | **The advocate / community member** | Advocate Portal (external) ✅ **in scope** | This is the missing half of "advocacy." Today the platform watches advocates; it never *engages* them. A member-facing portal (rank, impact, badges, quests/rewards) turns passive measurement into an active advocacy loop and is a growth flywheel. |
-| 5 | **Client sub-roles: Moderator & Viewer/Stakeholder** | Roles inside Client Workspace | A community manager, a moderator (threat queue only), and a founder/exec (read-only dashboards + reports) have very different needs. One "client login" is too coarse. |
-| 6 | **Developer / integrator** | Developer Portal | API keys, webhooks, docs, usage. Already on the roadmap ("API Access"). Needed for clients who want to pipe data into their own tools. |
-| 7 | **Prospect / public** | Marketing site + onboarding funnel | Landing, pricing, demo request, self-serve signup. The front door to surface #1. |
-
-**Recommendation:** Build #1, #2, #3 first (your stated need), design #5 in from
-day one as roles (cheap now, expensive to retrofit), and ship #4 (Advocate
-Portal) as a confirmed external surface right after the core monitoring loop —
-it directly serves the "advocate" goal you called out.
-
-> **Provisioning model note:** Because onboarding is Attrakt-provisioned, the
-> Ops Console (#2) is effectively a *prerequisite* for client value, not a
-> later-phase nicety — Attrakt must be able to connect platforms and stand up a
-> workspace before a client can use #1. This pulls the Ops Console's
-> provisioning surface earlier in the build order (see §5).
-
-### Role / permission matrix (within the Client Workspace)
+### Role / permission matrix (target, via Clerk orgs)
 
 | Capability | Owner/Admin | Community Mgr | Moderator | Viewer/Stakeholder |
 |------------|:-----------:|:-------------:|:---------:|:------------------:|
-| View dashboards & analytics | ✅ | ✅ | ◑ (own area) | ✅ |
-| Member directory & profiles | ✅ | ✅ | ✅ | 👁️ read |
-| Merge / edit identities | ✅ | ✅ | — | — |
-| Advocate program & rewards | ✅ | ✅ | — | 👁️ read |
-| Threat queue & moderation actions | ✅ | ✅ | ✅ | 👁️ read |
+| Overview & analytics | ✅ | ✅ | ◑ | 👁️ |
+| Members & profiles | ✅ | ✅ | ✅ | 👁️ |
+| Advocate scoring & briefs | ✅ | ✅ | — | 👁️ |
+| Context Engine (knowledge, synthesis, campaigns) | ✅ | ✅ | — | 👁️ |
+| Threat queue & actions (when UI ships) | ✅ | ✅ | ✅ | 👁️ |
 | Reports & exports | ✅ | ✅ | — | ✅ |
-| Platform connections / credentials | ✅ | — | — | — |
+| Connections / credentials | ✅ | — | — | — |
 | Team & billing | ✅ | — | — | — |
 
 ---
 
 ## 2. Surface architecture
 
-Multi-tenant, so separate the surfaces by subdomain + auth scope rather than one
-blended app:
-
+**Today (built):** one app, slug-tenanted.
 ```
-attrakt.io               → Marketing site + onboarding funnel (public)
-app.attrakt.io           → Client Workspace        (tenant-scoped)   [Audience 1, 5]
-advocates.attrakt.io     → Advocate Portal          (member-scoped)   [Audience 4]  ✅ in scope
-console.attrakt.io       → Attrakt Ops Console      (cross-tenant)    [Audience 2]
-admin.attrakt.io         → System Admin             (global/infra)    [Audience 3]
-developers.attrakt.io    → Developer/API portal     (tenant-scoped)   [Audience 6]  (proposed)
+apps/admin  →  /login  →  /[clientSlug]/(overview|members|context)
+              shared-secret auth · Clerk integration point marked
 ```
 
-All share one design system and auth provider; scope + role gate what renders.
-The existing `apps/admin` (Next.js + Tailwind) becomes the basis for the Client
-Workspace; the Ops Console and System Admin are sibling apps in the monorepo.
+**Target (planned):** the same app grows tabs and then splits scopes by Clerk
+role/org; dedicated external surfaces are added as separate apps.
+```
+attrakt.io               → Marketing + onboarding (public)            ⬜
+app.attrakt.io           → Client Workspace (Clerk org = client)      🟡 evolving from apps/admin
+advocates.attrakt.io     → Advocate Portal (member-scoped)            ⬜ in scope
+console.attrakt.io       → Attrakt Ops Console (cross-tenant)         ⬜
+admin.attrakt.io         → System Admin (global/infra)               ⬜
+developers.attrakt.io    → Developer/API portal                      ⬜
+```
+All share one design system (already present: `components/ui/*`, Tailwind) and
+will share Clerk auth; scope + role gate what renders.
 
 ---
 
 ## 3. Site maps
 
-### 3.1 Client Workspace — `app.attrakt.io` (Audience 1)
+### 3.1 Client Workspace — `apps/admin` → `app.attrakt.io` (Audience 1, 5)
 
-**Onboarding flow (Attrakt-provisioned).** Platform connection and workspace
-setup happen in the Ops Console *before* the client logs in (see §3.2). The
-client never sees a connect-your-platforms wizard. Their first run is a short
-guided tour of an already-live workspace:
-1. `/invite/:token` → accept invite, set password / SSO
-2. `/welcome` → guided tour: "Your community is already connected and being
-   tracked." Highlights Overview, Members, Threats.
-3. `/welcome/preferences` → confirm digest cadence & personal alert routing
-   (Slack/email) — the *only* setup a client self-serves
-4. `/welcome/team` → (Owner only) invite teammates with roles
-5. → land on Overview, with a lightweight setup-health banner if anything Attrakt
-   provisioned is still warming up (e.g. metrics not yet computed)
+**Tenant shell (✅ built):** sticky header with client name + "Intelligence",
+nav tabs, `max-w-[1200px]` content. Root `/` redirects to first client slug.
 
-Clients can *view* connection status and *request changes* but cannot edit
-credentials — those live with Attrakt (see `/settings/connections` below).
+**Onboarding (Attrakt-provisioned).** No client connect-wizard. Operators seed/
+provision (`seed:demo`, knowledge intake, synthesis). Client first-run = guided
+tour of a live workspace. (⬜ tour UI; provisioning is CLI/operator today.)
 
-**Main navigation:**
+**Navigation — built + planned:**
 ```
-/                         Overview / Pulse
-  • Community health score, DAU/WAU/MAU tiles, sentiment gauge
-  • Today's AI digest (pulse-agent output), anomalies, highlights
-  • Open threats summary, top movers
+/[clientSlug]                     Overview / Pulse                         ✅ built
+  • Metric tiles: Active members · New members · Messages · Governance posts
+  • Activity chart (messages + events/day, 90d)
+  • Segment distribution (Champion/Advocate/Active/Casual/Lurker)
+  • Messages by platform (Discord/GitHub/Twitter/Discourse)
+  • (planned ⬜) today's AI digest inline, anomalies, open-threats summary
 
-/members                  Member directory
-  /members/:id            Unified member profile
-    • Cross-platform identities (Discord/GitHub/Twitter), match confidence
-    • Engagement timeline, sentiment, first/last seen
-    • Actions: merge identities, tag, add to segment
-  /members/segments       Saved segments / filters
+/[clientSlug]/members             Member directory                          ✅ built
+  • Members table; member panel (sheet) on select
+  • Panel shows advocate score + latest advocate brief + identities
+  • (planned ⬜) merge identities, tags, saved segments
 
-/advocates                Advocate program
-  • Leaderboard (top contributors by cross-platform engagement)
-  • Advocate tiers / super-users, "rising" advocates
-  • Recognition & rewards (quests, points) [phase 2]
-  /advocates/:id          Advocate detail (impact, history)
+/[clientSlug]/context             Context Engine                            ✅ built  ← Pillar B
+  • Active context profile (versioned: draft/active/archived) — ContextSections
+  • Knowledge documents list + intake (product_docs, brand_guidelines,
+    marketing_material, leadership_interview, strategy_doc, website, other)
+  • Re-synthesise action (regenerate profile from knowledge)
+  • Campaign brief generator: objective → advocates to activate, channels,
+    on-brand message angles (grounded in the active profile)
+  • API: /api/[clientSlug]/context/{knowledge,resynthesise,campaign}
 
-/analytics                Analytics
-  • Time-series (DAU/volume/sentiment/growth), WoW & MoM
-  • Platform breakdown tabs: Discord | GitHub | Twitter
-  • Anomaly markers, export (CSV/PNG)
+/[clientSlug]/advocates           Advocate program                          ⬜ planned
+  • Leaderboard by segment, rising advocates, advocate briefs at scale
+  • (recognition/rewards = Advocate Portal, §3.4)
 
-/threats                  Protection / threat queue
-  • Queue filtered by severity (LOW→CRITICAL) & status
-  • Status workflow: DETECTED → REVIEWING → ACTIONED → RESOLVED / FALSE_POSITIVE
-  /threats/:id            Threat detail: evidence, context, member, actions
+/[clientSlug]/analytics           Deep analytics                            ⬜ planned
+  • Time-series WoW/MoM, per-platform tabs, anomaly markers, export
 
-/reports                  Reports
-  • Digest archive (daily/weekly), scheduled reports
-  • Export PDF / Markdown
+/[clientSlug]/threats             Protection / threat queue                 🟡 backend-only
+  • Queue by severity (LOW→CRITICAL) & status
+    (DETECTED→REVIEWING→ACTIONED→RESOLVED/FALSE_POSITIVE), evidence, actions
 
-/settings                 Settings
-  /settings/connections   Platform connections & health (read-only; "request a change" → Attrakt)
-  /settings/team          Team & roles (Audience 5)
-  /settings/alerts        Alert routing & thresholds
-  /settings/digest        Digest preferences
-  /settings/data          Export, retention, GDPR
-  /settings/billing       Plan & billing
-  /settings/api           API keys (links to Developer portal)
+/[clientSlug]/reports             Reports                                   ⬜ planned
+  • Weekly digest archive (WeeklyDigest), scheduled reports, PDF/MD export
+
+/[clientSlug]/settings            Settings                                  ⬜ planned
+  • connections (read-only + "request a change"), team & roles (Clerk),
+    alert routing, digest prefs, data/GDPR, billing, API keys
 ```
 
-### 3.2 Attrakt Ops Console — `console.attrakt.io` (Audience 2)
+### 3.2 Attrakt Ops Console — `console.attrakt.io` (Audience 2) ⬜ planned
 
-Cross-tenant view for Attrakt's growth/success team. Same data, *portfolio* lens.
-
+Cross-tenant lens. Today this is approximated by slug-switching + CLIs.
 ```
-/                         Portfolio overview
-  • All clients: health score, MAU, trend, churn-risk flags
-  • Aggregate engagement & threat heatmap across communities
-
+/                         Portfolio overview (all clients: health, MAU, churn-risk)
 /clients                  Client list
   /clients/new            Provision a new client (Attrakt-led onboarding)
-    • Create workspace, choose type, set plan
   /clients/:id            Client detail (usage, adoption, onboarding status)
     • "View as client" (impersonate, audit-logged)
-  /clients/:id/setup      Provisioning console — connect platforms ON BEHALF of client
-    • Discord: install bot → pick server & channels
-    • GitHub: install GitHub App / webhook → pick repos/org
-    • Twitter: authorize API → tracked accounts/keywords
-    • Set digest cadence, alert routing, severity thresholds, seed team invites
-    • Provisioning checklist → "ready to hand off" gate
-
-/growth                   Ecosystem growth
-  • Cross-community trends & benchmarks
-  • Shared members/advocates across clients (network graph)
-  • Cohort & retention comparisons
-
-/success                  Account management
-  • Onboarding/adoption funnel per client
-  • At-risk alerts (low DAU, stalled setup, dropping sentiment)
-  • Playbooks / outreach tasks
-
-/threats                  Cross-client threat oversight
-  • Coordinated attacks spanning communities, shared bad actors
-
-/agents                   Agent operations
-  • Pulse / threat-scan run history, quality, failures, costs
+  /clients/:id/setup      Provisioning console — connect platforms on behalf of client
+    • Discord bot · GitHub App/webhook · Twitter API · Discourse polling
+    • seed knowledge + run first context synthesis (Pillar B handoff)
+    • digest cadence, alert routing, severity thresholds → "ready to hand off"
+/growth                   Ecosystem growth (cross-community trends, shared advocates, benchmarks)
+/success                  Account mgmt (adoption funnel, at-risk alerts, playbooks)
+/threats                  Cross-client threat oversight (coordinated attacks)
+/agents                   Agent ops (pulse/threat/context runs, quality, cost)
 ```
 
-### 3.3 System Admin — `admin.attrakt.io` (Audience 3)
+### 3.3 System Admin — `admin.attrakt.io` (Audience 3) ⬜ planned
 
-Infra / backend changes. Maps to operational gaps noted in the MVP audit
-(queues, workers, identity merge tooling).
-
+Today: CLI scripts (`seed:demo`, `context-synthesise`, `context-activate`,
+`knowledge-add`, `member:merge`, `metrics:compute`). A UI would wrap these:
 ```
-/                         System health
-  • Queue status (BullMQ / Bull-Board), workers, ingestion lag
-  • Job throughput & failures per platform
-
-/tenants                  Tenant management
-  • Create/suspend/delete clients, plan assignment
-
-/users                    Users & RBAC
-  • Global users, role definitions, permissions
-
-/integrations            Platform integration config
-  • API keys, webhook secrets, OAuth apps, rate limits
-
-/data                     Data operations
-  • Member/identity merge tooling, reprocessing, backfills
-  • Soft-delete review (deletedAt / mergedIntoId)
-
-/agents                   Agent & model config
-  • Anthropic key, model selection, prompts, schedules
-
-/flags                    Feature flags & plans
-
-/audit                    Audit log (all admin & impersonation actions)
+/                  System health (BullMQ queues, workers, ingestion lag)
+/tenants           Tenant CRUD, plan assignment
+/users             Users & RBAC (Clerk admin)
+/integrations      API keys, webhook secrets, OAuth apps, rate limits
+/data              Member/identity merge, reprocessing, backfills, soft-delete review
+/agents            Agent & model config (Anthropic key/model/prompts/schedules)
+/knowledge         Knowledge & context-profile admin (versions, activate/archive)
+/flags             Feature flags & plans
+/audit             Audit log (admin + impersonation)
 ```
 
-### 3.4 Advocate Portal — `advocates.attrakt.io` (Audience 4, ✅ in scope)
-
-External, member-facing. Magic-link or OAuth (connect Discord/GitHub/Twitter).
-
+### 3.4 Advocate Portal — `advocates.attrakt.io` (Audience 4) ⬜ planned, ✅ in scope
+External, member-facing. Auth via OAuth-connect (Discord/GitHub/Twitter), which
+also strengthens identity resolution.
 ```
-/                         Your impact (rank, points, contribution summary)
-/leaderboard             Community leaderboard & tiers
-/quests                  Quests / rewards / badges [phase 2]
-/profile                 Connected accounts, opt-in/out, privacy
-```
-
-### 3.5 Developer Portal — `developers.attrakt.io` (Audience 6, proposed)
-
-```
-/                         API keys & overview
-/webhooks                Webhook endpoints & delivery logs
-/docs                    API reference
-/usage                   Request/usage metrics & limits
+/                 Your impact (rank, segment, contribution + helpfulness summary)
+/leaderboard      Community leaderboard & segment tiers
+/quests           Quests / rewards / badges (phase 2)
+/profile          Connected accounts, opt-in/out, privacy
 ```
 
-### 3.6 Marketing site — `attrakt.io` (Audience 7, proposed)
+### 3.5 Developer Portal — `developers.attrakt.io` (Audience 6) ⬜ planned
+`/` API keys · `/webhooks` endpoints & logs · `/docs` reference · `/usage`.
 
-```
-/  •  /features  •  /pricing  •  /use-cases  •  /demo (request)  •  /signup
-```
+### 3.6 Marketing site — `attrakt.io` (Audience 7) ⬜ planned
+`/` · `/features` · `/pricing` · `/use-cases` · `/demo` · `/signup`.
 
 ---
 
 ## 4. Cross-cutting UI conventions
 
-- **Shell:** left sidebar nav + top bar (workspace/tenant switcher, search,
-  notifications, account). Ops Console & Admin reuse the shell with a different
-  nav set and a global tenant switcher.
-- **Design system:** shared component library (Tailwind, as in `apps/admin`) —
-  metric tiles, time-series charts, sentiment gauge, data tables w/ filter+export,
-  status badges (threat severity/status), member/identity cards, timeline.
-- **Empty/loading states:** every analytics surface needs a "still collecting
-  data" state — metrics only populate after ingestion + scheduled compute run.
-- **Real-time:** threat alerts and digest-ready events via Redis pub/sub →
-  notification center.
-- **Auditability:** all impersonation ("view as client") and admin mutations
-  logged to the audit surface.
+- **Design system (✅ present):** `components/ui/*` (button, card, input, badge,
+  select, sheet, textarea, label), Tailwind tokens, `app-wash` background,
+  `max-w-[1200px]` shell. New surfaces should reuse these.
+- **Shell:** header + nav tabs today; sidebar + tenant switcher when scope grows.
+- **Empty/loading states (✅ pattern exists):** e.g. "No client data — run
+  seed:demo", "No active context profile — add knowledge then re-synthesise."
+  Every analytics surface needs a "still collecting / not yet computed" state.
+- **Auth seam:** keep server queries/route handlers auth-agnostic so Clerk drops
+  in behind `isValidSession()` (already designed this way).
+- **Auditability:** log impersonation and admin mutations once Ops/Admin ship.
 
 ---
 
-## 5. Recommended build phases
+## 5. Recommended build phases (reconciled)
 
-Reordered to reflect the Attrakt-provisioned model: clients can't self-onboard,
-so the Ops Console **provisioning surface** must exist before the client app
-delivers value.
+| Phase | Deliverable | Status |
+|-------|-------------|--------|
+| **0** | Design system + tenant shell + auth seam | ✅ done |
+| **1** | Overview, Members + panel, Context Engine | ✅ done |
+| **2** | **Clerk auth + org→client mapping + roles** (unblocks client vs. oversight separation) | ⬜ next |
+| **3** | Threat queue UI (backend already exists), Reports/digest archive | ⬜ |
+| **4** | Advocates tab + deep Analytics; Settings (read-only connections, team) | ⬜ |
+| **5** | Ops Console (portfolio, provisioning, growth, success) | ⬜ |
+| **6** | Advocate Portal (external) | ⬜ |
+| **7** | System Admin UI; Developer Portal; Marketing site | ⬜ |
 
-| Phase | Deliverable |
-|-------|-------------|
-| **0** | Design system + app shell (sidebar, tenant switcher, auth, RBAC scaffolding) |
-| **1** | **Ops Console — provisioning** (`/clients/new`, `/clients/:id/setup`, connect platforms on behalf of client). Unblocks every client workspace. |
-| **2** | Client Workspace: guided first-run tour, Overview/Pulse, Members + profiles, Threats queue, read-only Connections (the core monitoring loop) |
-| **3** | Client: Analytics, Advocates (internal view), Reports; client sub-roles (Mod/Viewer) |
-| **4** | Ops Console — portfolio + growth + success (cross-tenant lenses) |
-| **5** | Advocate Portal (external, in scope) |
-| **6** | System Admin (health, tenants, data ops, agents) |
-| **7** | Developer Portal + Marketing site |
-
-Note: Phase 1 analytics depend on the metrics pipeline actually running (see
-`docs/MVP_GAP_AUDIT.md`) — worth confirming the scheduler/worker are live before
-building analytics-heavy screens.
+Phase 2 (Clerk) is the highest-leverage next step: it's the prerequisite for
+real client vs. Attrakt-oversight vs. admin separation, and the seam is already
+designed for it.
 
 ---
 
@@ -298,20 +269,21 @@ building analytics-heavy screens.
 
 **Resolved (2026-06-21):**
 - ✅ Advocate Portal → distinct external surface, in scope.
-- ✅ Onboarding → Attrakt-provisioned (Ops Console does setup; client gets a
-  ready workspace).
+- ✅ Onboarding → Attrakt-provisioned (matches the operated/seeded live app).
+- ✅ Architecture clarified → single slug-tenanted app now; Clerk orgs for roles;
+  dedicated surfaces split later.
 
 **Still open:**
-1. **Client sub-roles** — confirm the four roles (Owner / Community Mgr /
-   Moderator / Viewer) match how your customers are organized, or adjust.
-2. **Advocate Portal auth** — how do members authenticate? Magic link, or OAuth
-   by connecting their Discord/GitHub/Twitter (which also strengthens identity
-   resolution)? Recommend OAuth-connect.
-3. **Advocate opt-in & privacy** — is appearing on a public leaderboard opt-in or
-   opt-out? Affects GDPR posture and portal UX.
-4. **Rewards in v1** — is the advocate program recognition-only (rank/badges) at
-   launch, or do real rewards/quests ship in v1?
-5. **Whether a client can ever self-edit connections** — currently read-only +
-   "request a change." Confirm clients never need direct credential access.
+1. **Surface split vs. one app** — do client, oversight, and admin stay one
+   Clerk-gated app for the foreseeable future, or split into subdomains soon?
+   (Recommend: one app + Clerk roles first; split only when needed.)
+2. **Threat UI priority** — backend is built but unsurfaced. Promote a Threats
+   tab in the next phase, or keep protection backend-only for now?
+3. **Client sub-roles** — confirm Owner / Community Mgr / Moderator / Viewer maps
+   to your customers, so Clerk org roles are modeled correctly.
+4. **Advocate Portal auth & privacy** — OAuth-connect (recommended) and opt-in
+   vs. opt-out leaderboard (GDPR).
+5. **Context Engine access** — is campaign/advocate-brief generation a client
+   capability, an Attrakt-oversight capability, or both? (Affects which surface
+   owns Pillar B.)
 </content>
-</invoke>
