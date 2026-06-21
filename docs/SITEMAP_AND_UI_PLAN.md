@@ -27,14 +27,26 @@ The product as actually built is **broader** than the original
    delivered via **Clerk orgs**, not separate apps (at least initially).
 
 2. **There are two product pillars; the original plan only covered one.**
-   - **Pillar A — Community & Advocate Intelligence:** monitor the community,
-     score advocates, surface segments and health. (The original product.)
-   - **Pillar B — Context Engine:** ingest a client's internal knowledge
-     (product docs, brand guidelines, leadership interviews, strategy) →
-     synthesize a **versioned context profile** → generate **campaign briefs**
-     and **advocate briefs** grounded in that context. This is a content/
-     activation pillar that this plan's earlier versions missed entirely. It is
-     the third nav tab in the live app today.
+   - **Pillar A — Community & Advocate Intelligence (the *output* layer):**
+     monitor the community, score advocates, surface segments and health,
+     generate digests, campaign briefs, and advocate briefs. (The original product.)
+   - **Pillar B — Context Engine (the *input / grounding* layer):** the client's
+     integration & grounding hub that feeds Pillar A. It has **two inputs**:
+     **(i) platform connections** — wire up the data-source APIs (Discord,
+     GitHub, Twitter, Discourse) into the intelligence layer; and **(ii)
+     knowledge** — ingest the client's own material (product docs, brand
+     guidelines, leadership interviews, strategy) → synthesize a **versioned
+     context profile**. Everything Pillar A produces is *grounded in* this
+     profile + connected data. **Used by both clients and Attrakt oversight.**
+     The live app's `/context` tab ships input (ii) today; input (i) (API
+     connection management in-UI) is the planned addition (`PlatformConfig` is
+     operator/CLI-managed today).
+
+> **Terminology note (resolved 2026-06-21):** "Context Engine" is the **superset**
+> — connections **and** knowledge — not just document synthesis. This supersedes
+> v2's separate "Settings → Connections" surface and v2's "connections are
+> read-only for clients": clients connect their own APIs *through* the Context
+> Engine, and Attrakt provisions through the same surface (hence "for both").
 
 ### What's actually built vs. what this plan adds
 
@@ -45,7 +57,8 @@ The product as actually built is **broader** than the original
 | Nav: **Overview / Members / Context** | ✅ built | `nav-tabs.tsx` |
 | Overview: active/new members, messages, **governance posts**, activity chart, **segment distribution**, messages-by-platform | ✅ built | `[clientSlug]/page.tsx` |
 | Members directory + member panel (advocate score + advocate brief) | ✅ built | `members/`, `member-panel.tsx` |
-| **Context Engine** (knowledge intake → versioned profile → campaign brief) | ✅ built | `context/page.tsx`, `context-agent` |
+| **Context Engine** — knowledge intake → versioned profile → campaign brief | ✅ built | `context/page.tsx`, `context-agent` |
+| **Context Engine** — platform API connection management (in-UI) | 🟡 backend-only | `PlatformConfig` model exists; operator/CLI today, planned in-UI |
 | Advocate scoring + segments (Champion→Lurker) | ✅ built | `AdvocateScore`, `scoring/score.ts` |
 | Helpfulness evaluation (Claude-scored) | ✅ built | `HelpfulnessEvaluation` |
 | Weekly digest / ecosystem health report | ✅ built | `WeeklyDigest`, `pulse-weekly-v1` |
@@ -150,7 +163,12 @@ tour of a live workspace. (⬜ tour UI; provisioning is CLI/operator today.)
   • Panel shows advocate score + latest advocate brief + identities
   • (planned ⬜) merge identities, tags, saved segments
 
-/[clientSlug]/context             Context Engine                            ✅ built  ← Pillar B
+/[clientSlug]/context             Context Engine (integration + grounding hub)  ← Pillar B
+  ── Connections (input i) ─────────────────────────────────────  🟡 backend-only
+  • Connect / manage data-source APIs: Discord, GitHub, Twitter, Discourse
+    (PlatformConfig: credentials + per-platform config, connection health)
+  • Used by client (self-connect) AND Attrakt (provision on their behalf)
+  ── Knowledge & profile (input ii) ────────────────────────────  ✅ built
   • Active context profile (versioned: draft/active/archived) — ContextSections
   • Knowledge documents list + intake (product_docs, brand_guidelines,
     marketing_material, leadership_interview, strategy_doc, website, other)
@@ -174,8 +192,8 @@ tour of a live workspace. (⬜ tour UI; provisioning is CLI/operator today.)
   • Weekly digest archive (WeeklyDigest), scheduled reports, PDF/MD export
 
 /[clientSlug]/settings            Settings                                  ⬜ planned
-  • connections (read-only + "request a change"), team & roles (Clerk),
-    alert routing, digest prefs, data/GDPR, billing, API keys
+  • team & roles (Clerk), alert routing, digest prefs, data/GDPR, billing
+  • (NOTE: platform connections live in the Context Engine, not here)
 ```
 
 ### 3.2 Attrakt Ops Console — `console.attrakt.io` (Audience 2) ⬜ planned
@@ -187,10 +205,11 @@ Cross-tenant lens. Today this is approximated by slug-switching + CLIs.
   /clients/new            Provision a new client (Attrakt-led onboarding)
   /clients/:id            Client detail (usage, adoption, onboarding status)
     • "View as client" (impersonate, audit-logged)
-  /clients/:id/setup      Provisioning console — connect platforms on behalf of client
-    • Discord bot · GitHub App/webhook · Twitter API · Discourse polling
-    • seed knowledge + run first context synthesis (Pillar B handoff)
+  /clients/:id/setup      Provisioning — drives the client's Context Engine on their behalf
+    • Connections: Discord bot · GitHub App/webhook · Twitter API · Discourse polling
+    • seed knowledge + run first context synthesis (same Context Engine, operator-driven)
     • digest cadence, alert routing, severity thresholds → "ready to hand off"
+    • (the Context Engine is shared "for both" — this is the Attrakt-side entry to it)
 /growth                   Ecosystem growth (cross-community trends, shared advocates, benchmarks)
 /success                  Account mgmt (adoption funnel, at-risk alerts, playbooks)
 /threats                  Cross-client threat oversight (coordinated attacks)
@@ -272,6 +291,11 @@ designed for it.
 - ✅ Onboarding → Attrakt-provisioned (matches the operated/seeded live app).
 - ✅ Architecture clarified → single slug-tenanted app now; Clerk orgs for roles;
   dedicated surfaces split later.
+- ✅ **Context Engine scope → superset (connections + knowledge), for both
+  audiences.** It is the client's integration & grounding hub: connect the
+  data-source APIs *and* upload knowledge, both feeding the intelligence layer.
+  Clients self-connect through it; Attrakt provisions through the same surface.
+  This replaces the earlier "Settings → Connections (read-only)" framing.
 
 **Still open:**
 1. **Surface split vs. one app** — do client, oversight, and admin stay one
@@ -283,7 +307,3 @@ designed for it.
    to your customers, so Clerk org roles are modeled correctly.
 4. **Advocate Portal auth & privacy** — OAuth-connect (recommended) and opt-in
    vs. opt-out leaderboard (GDPR).
-5. **Context Engine access** — is campaign/advocate-brief generation a client
-   capability, an Attrakt-oversight capability, or both? (Affects which surface
-   owns Pillar B.)
-</content>
