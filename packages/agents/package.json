@@ -12,7 +12,8 @@
     "pulse-agent": "tsx src/pulse-agent/index.ts",
     "threat-agent": "tsx src/threat-agent/index.ts",
     "scoring:run": "tsx src/scoring-agent/run.ts",
-    "brief:generate": "tsx src/scoring-agent/brief-run.ts"
+    "brief:generate": "tsx src/scoring-agent/brief-run.ts",
+    "digest:run": "tsx scripts/digest-run.ts"
   },
   "dependencies": {
     "@attrakt/core": "workspace:*",

@@ -18,6 +18,7 @@
     "context:synthesise": "tsx packages/agents/scripts/context-synthesise.ts",
     "context:activate": "tsx packages/agents/scripts/context-activate.ts",
     "campaign:brief": "tsx packages/agents/scripts/campaign-brief.ts",
+    "digest:run": "tsx packages/agents/scripts/digest-run.ts",
     "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
   },
   "devDependencies": {

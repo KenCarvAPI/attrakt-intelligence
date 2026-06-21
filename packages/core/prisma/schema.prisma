@@ -37,6 +37,7 @@ model Client {
   knowledgeDocuments     KnowledgeDocument[]
   contextProfiles        ContextProfile[]
   campaignBriefs         CampaignBrief[]
+  weeklyDigests          WeeklyDigest[]
 
   @@index([active])
   @@map("clients")
@@ -448,6 +449,24 @@ enum ContextProfileStatus {
   draft
   active
   archived
+}
+
+// Weekly ecosystem health report produced by the pulse-agent, grounded in the
+// client's active ContextProfile. Stored as structured JSON plus rendered
+// Markdown so it can be re-displayed or re-sent without regeneration.
+model WeeklyDigest {
+  id        String   @id @default(cuid())
+  clientId  String
+  period    String   // ISO week, e.g. "2026-W24"
+  content   Json     @default("{}") // structured digest (headline, movements, advocates, ...)
+  markdown  String   // rendered Markdown
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, period])
+  @@index([clientId, createdAt])
+  @@map("weekly_digests")
 }
 
 // Campaign brief — bridges the internal knowledge layer (ContextProfile) and
