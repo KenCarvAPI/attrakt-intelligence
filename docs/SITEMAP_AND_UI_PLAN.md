@@ -47,6 +47,13 @@ The product as actually built is **broader** than the original
 > v2's separate "Settings → Connections" surface and v2's "connections are
 > read-only for clients": clients connect their own APIs *through* the Context
 > Engine, and Attrakt provisions through the same surface (hence "for both").
+>
+> **Scope expanded — see `docs/CONTEXT_ENGINE.md`** for the full design: the
+> Context Engine should ingest as many live sources as possible across five
+> domains (strategy/brand, product, community/ecosystem, marketing ops, marketing
+> performance) into a **structured, queryable store** (retrieval-augmented
+> grounding) rather than synthesizing one profile loaded wholesale. That doc is
+> pending approval before implementation.
 
 ### What's actually built vs. what this plan adds
 
