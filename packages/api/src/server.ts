@@ -115,12 +115,13 @@ if (require.main === module) {
     log.info({ url: `http://localhost:${PORT}/admin/queues` }, 'Queue dashboard available');
   });
 
-  // Bootstrap background processing: schedule recurring metric jobs and start
-  // the worker that consumes them. Without this the Metric table is never
-  // populated (which is what left the pulse digest's metrics empty).
-  scheduleMetricsComputation();
+  // Bootstrap background processing: schedule recurring metric jobs (per active
+  // client) and start the worker that consumes them. Without this the Metric
+  // table is never populated (which is what left the pulse digest's metrics empty).
   const metricsWorker = createMetricsWorker();
-  log.info({}, 'Metrics scheduler and worker started');
+  scheduleMetricsComputation()
+    .then(() => log.info({}, 'Metrics scheduler and worker started'))
+    .catch((error) => log.error({ error }, 'Failed to schedule metrics computation'));
 
   process.on('SIGINT', async () => {
     log.info({}, 'Shutting down API server');

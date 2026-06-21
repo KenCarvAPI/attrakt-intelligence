@@ -18,6 +18,10 @@ model Client {
   id          String   @id @default(cuid())
   name        String
   slug        String   @unique
+  // Workers and schedulers iterate over active clients only. Provisioning a
+  // client sets this true; flip it false to pause all processing for a tenant
+  // without deleting their data.
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -34,6 +38,7 @@ model Client {
   contextProfiles        ContextProfile[]
   campaignBriefs         CampaignBrief[]
 
+  @@index([active])
   @@map("clients")
 }
 

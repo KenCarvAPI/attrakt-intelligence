@@ -1,7 +1,21 @@
 import express from 'express';
-import { addJob, config, log } from '@attrakt/core';
+import { addJob, resolveClientIdByPlatform, config, log } from '@attrakt/core';
 import type { JobData } from '@attrakt/api/src/queues/types';
 import { verifyGithubSignature } from './verify';
+
+/**
+ * Extract the GitHub org/owner login from any webhook payload so it can be
+ * mapped to the owning tenant via PlatformConfig (`config.org`).
+ */
+function extractOrg(payload: any): string | null {
+  return (
+    payload?.organization?.login ??
+    payload?.repository?.owner?.login ??
+    (typeof payload?.repository?.full_name === 'string'
+      ? payload.repository.full_name.split('/')[0]
+      : null)
+  );
+}
 
 const app = express();
 const PORT = config.githubWebhookPort;
@@ -36,9 +50,14 @@ app.post('/webhooks/github', async (req, res) => {
   const payload = req.body;
 
   try {
-    // Extract client ID from repository or organization
-    // In MVP, we'll use a simple mapping
-    const clientId = config.defaultClientId;
+    // Map the repo's org to its owning tenant; drop events from unconfigured orgs
+    // rather than attributing them to a default client.
+    const org = extractOrg(payload);
+    const clientId = org ? await resolveClientIdByPlatform('GITHUB', { org }) : null;
+    if (!clientId) {
+      log.warn({ event, delivery, org }, 'No client configured for GitHub org — ignoring webhook');
+      return res.status(202).json({ received: true, ignored: 'unconfigured_org', org });
+    }
 
     // Map GitHub events to our event types
     const eventMap: Record<string, string> = {

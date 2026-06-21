@@ -1,17 +1,36 @@
 import { GatewayIntentBits, Events, Message, GuildMember } from 'discord.js';
-import { addJob, getDiscordClient, config, log } from '@attrakt/core';
+import { addJob, getDiscordClient, resolveClientIdByPlatform, config, log } from '@attrakt/core';
 import type { JobData } from '@attrakt/api/src/queues/types';
 import type { DiscordMessagePayload, DiscordMemberPayload, DiscordReactionPayload } from '@attrakt/core/src/types/platforms';
 
 const client = getDiscordClient();
 
+/**
+ * Resolve the owning client for a Discord guild via its PlatformConfig
+ * (`config.guildId`). Multi-tenant: a single bot can serve several guilds, each
+ * mapped to a different tenant. Events from an unmapped guild are dropped rather
+ * than attributed to a default tenant. Results are cached for the process
+ * lifetime since the guild→client mapping rarely changes.
+ */
+const guildClientCache = new Map<string, string | null>();
+async function resolveClientIdForGuild(guildId: string | null): Promise<string | null> {
+  if (!guildId) return null;
+  if (guildClientCache.has(guildId)) return guildClientCache.get(guildId)!;
+  const clientId = await resolveClientIdByPlatform('DISCORD', { guildId });
+  guildClientCache.set(guildId, clientId);
+  if (!clientId) {
+    log.warn({ guildId }, 'No client configured for Discord guild — dropping event');
+  }
+  return clientId;
+}
+
 // Event: Message created
 client.on(Events.MessageCreate, async (message: Message) => {
   if (message.author.bot) return;
 
-  // Extract client ID from guild (for multi-tenant support)
-  // In MVP, we'll use a simple mapping or config
-  const clientId = config.defaultClientId;
+  // Map the guild to its owning tenant; drop events from unconfigured guilds.
+  const clientId = await resolveClientIdForGuild(message.guildId);
+  if (!clientId) return;
 
   const payload: DiscordMessagePayload = {
     id: message.id,
@@ -43,7 +62,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
 // Event: Guild member added
 client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
-  const clientId = config.defaultClientId;
+  const clientId = await resolveClientIdForGuild(member.guild.id);
+  if (!clientId) return;
 
   const payload: DiscordMemberPayload = {
     userId: member.id,
@@ -62,7 +82,8 @@ client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
 
 // Event: Guild member removed
 client.on(Events.GuildMemberRemove, async (member: GuildMember) => {
-  const clientId = config.defaultClientId;
+  const clientId = await resolveClientIdForGuild(member.guild.id);
+  if (!clientId) return;
 
   const payload: DiscordMemberPayload = {
     userId: member.id,
@@ -82,7 +103,8 @@ client.on(Events.GuildMemberRemove, async (member: GuildMember) => {
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (user.bot) return;
 
-  const clientId = config.defaultClientId;
+  const clientId = await resolveClientIdForGuild(reaction.message.guildId || null);
+  if (!clientId) return;
 
   const payload: DiscordReactionPayload = {
     messageId: reaction.message.id,

@@ -129,13 +129,4 @@ export async function ingestKnowledgeDocument(
   return { document, deduped: false, truncated };
 }
 
-/**
- * Resolve a client reference that may be either a slug or a cuid id.
- * Returns the client id, or null if no match.
- */
-export async function resolveClientId(ref: string): Promise<string | null> {
-  const bySlug = await prisma.client.findUnique({ where: { slug: ref } });
-  if (bySlug) return bySlug.id;
-  const byId = await prisma.client.findUnique({ where: { id: ref } });
-  return byId?.id ?? null;
-}
+// `resolveClientId` now lives in ./clients (client provisioning + lookup).

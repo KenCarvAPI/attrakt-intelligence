@@ -10,6 +10,7 @@ import {
   config,
   log,
   CLAUDE_MODEL,
+  getActiveClients,
   loadActiveContextProfile,
   formatContextForPrompt,
 } from '@attrakt/core';
@@ -357,14 +358,15 @@ async function deliverDigest(clientId: string, digest: string) {
 // Schedule daily digest at 9am UTC
 log.info({}, 'Community Pulse Agent starting');
 
-const clientId = config.defaultClientId;
-
-// Run daily at 9am UTC
+// Run daily at 9am UTC, generating a digest for each active client (multi-tenant).
 cron.schedule('0 9 * * *', async () => {
-  log.info({ clientId }, 'Generating daily digest');
-  await generateDailyDigest(clientId).catch((error) => {
-    log.error({ error, clientId }, 'Failed to generate daily digest');
-  });
+  const clients = await getActiveClients();
+  log.info({ clientCount: clients.length }, 'Generating daily digests for active clients');
+  for (const client of clients) {
+    await generateDailyDigest(client.id).catch((error) => {
+      log.error({ error, clientId: client.id }, 'Failed to generate daily digest');
+    });
+  }
 });
 
 // Also support manual trigger via job queue

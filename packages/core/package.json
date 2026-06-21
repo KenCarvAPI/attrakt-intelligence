@@ -15,10 +15,11 @@
     "db:seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
     "member:merge": "tsx src/scripts/merge-member.ts",
+    "client:create": "tsx src/scripts/client-create.ts",
     "knowledge:add": "tsx scripts/knowledge-add.ts",
     "test": "vitest run && pnpm test:integration",
     "test:watch": "vitest",
-    "test:integration": "node --import tsx --test src/services/merge-member.test.ts"
+    "test:integration": "node --import tsx --test src/services/merge-member.test.ts src/services/tenant-isolation.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0",
