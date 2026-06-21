@@ -69,6 +69,17 @@ export async function processMessage(payload: DiscordMessagePayload, clientId: s
   const logger = log.child({ clientId, platform: 'DISCORD', event: 'messageCreate' });
 
   try {
+    // Idempotency: skip if this message was already ingested (duplicate gateway
+    // delivery or a backfill re-run).
+    const existing = await prisma.message.findUnique({
+      where: { platform_platformMessageId: { platform: 'DISCORD', platformMessageId: payload.id } },
+      select: { id: true },
+    });
+    if (existing) {
+      logger.debug({ messageId: payload.id }, 'Discord message already ingested; skipping');
+      return;
+    }
+
     // Resolve identity using centralized service
     const { memberId } = await resolveIdentity(clientId, 'DISCORD', payload.authorId, payload.authorUsername, {
       displayName: payload.authorDisplayName || undefined,
@@ -117,6 +128,7 @@ export async function processMessage(payload: DiscordMessagePayload, clientId: s
               memberId,
               platform: 'DISCORD' as const,
               eventType: 'MENTION' as const,
+              dedupeKey: `discord-${payload.id}:MENTION:${mentionedUserId}`,
               eventData: {
                 mentionedUserId,
                 messageId: payload.id,
@@ -126,11 +138,12 @@ export async function processMessage(payload: DiscordMessagePayload, clientId: s
             }
           : null;
       }),
-      ...linkMatches.map((link) => ({
+      ...linkMatches.map((link, i) => ({
         clientId,
         memberId,
         platform: 'DISCORD' as const,
         eventType: 'LINK_CLICK' as const,
+        dedupeKey: `discord-${payload.id}:LINK:${i}`,
         eventData: {
           url: link,
           messageId: payload.id,
@@ -140,9 +153,8 @@ export async function processMessage(payload: DiscordMessagePayload, clientId: s
     ].filter((e): e is NonNullable<typeof e> => e !== null);
 
     if (events.length > 0) {
-      await prisma.event.createMany({
-        data: events,
-      });
+      // skipDuplicates + dedupeKey makes event writes idempotent across retries.
+      await prisma.event.createMany({ data: events, skipDuplicates: true });
       logger.debug({ eventCount: events.length }, 'Events created');
     }
   } catch (error) {

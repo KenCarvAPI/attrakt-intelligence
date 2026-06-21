@@ -10,12 +10,19 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "pulse-agent": "tsx src/pulse-agent/index.ts",
-    "threat-agent": "tsx src/threat-agent/index.ts"
+    "threat-agent": "tsx src/threat-agent/index.ts",
+    "scoring:run": "tsx src/scoring-agent/run.ts",
+    "brief:generate": "tsx src/scoring-agent/brief-run.ts",
+    "digest:run": "tsx scripts/digest-run.ts",
+    "test": "node --import tsx --test src/smoke.test.ts"
   },
   "dependencies": {
     "@attrakt/core": "workspace:*",
     "@attrakt/api": "workspace:*",
     "@anthropic-ai/sdk": "^0.71.2",
+    "@prisma/client": "^5.9.0",
+    "bullmq": "^5.4.0",
+    "dotenv": "^16.4.5",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"
   },

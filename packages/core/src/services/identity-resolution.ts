@@ -12,18 +12,30 @@ export interface IdentityMatchResult {
   confidence: number;
 }
 
+export type ResolvablePlatform = 'DISCORD' | 'GITHUB' | 'TWITTER' | 'DISCOURSE';
+
+/** An external account explicitly linked on a profile (e.g. a Discourse user's
+ *  verified GitHub/Discord link). These are high-confidence identity signals. */
+export interface LinkedAccount {
+  platform: 'DISCORD' | 'GITHUB' | 'TWITTER';
+  username?: string;
+  platformUserId?: string;
+}
+
 /**
  * Find or create member and link platform identity
  */
 export async function resolveIdentity(
   clientId: string,
-  platform: 'DISCORD' | 'GITHUB' | 'TWITTER',
+  platform: ResolvablePlatform,
   platformUserId: string,
   username: string,
   options: {
     email?: string;
     displayName?: string;
     walletAddress?: string;
+    /** Explicitly-linked external accounts, ranked above username matching. */
+    linkedAccounts?: LinkedAccount[];
   } = {}
 ): Promise<IdentityMatchResult> {
   const normalizedUsername = normalizeUsername(username);
@@ -47,6 +59,43 @@ export async function resolveIdentity(
       matchMethod: existingIdentity.matchMethod as any,
       confidence: existingIdentity.matchConfidence || 1.0,
     };
+  }
+
+  // Strategy 1.5: Explicit linked accounts (high confidence).
+  // When a profile declares verified external accounts (e.g. a Discourse user
+  // who has linked their GitHub/Discord), match those against existing platform
+  // identities for this client. This is ranked ABOVE username matching because
+  // an explicit cross-platform link is far stronger than a coincidental handle.
+  for (const link of options.linkedAccounts ?? []) {
+    const linkMatch = await prisma.platformIdentity.findFirst({
+      where: {
+        member: { clientId, deletedAt: null },
+        platform: link.platform,
+        OR: [
+          ...(link.platformUserId ? [{ platformUserId: link.platformUserId }] : []),
+          ...(link.username
+            ? [{ username: { equals: normalizeUsername(link.username), mode: 'insensitive' as const } }]
+            : []),
+        ],
+      },
+      include: { member: true },
+    });
+
+    if (linkMatch) {
+      await prisma.platformIdentity.create({
+        data: {
+          memberId: linkMatch.memberId,
+          platform,
+          platformUserId,
+          username,
+          displayName: options.displayName,
+          matchMethod: 'explicit',
+          matchConfidence: 1.0,
+          metadata: { linkedVia: { platform: link.platform, username: link.username } },
+        },
+      });
+      return { memberId: linkMatch.memberId, matchMethod: 'explicit', confidence: 1.0 };
+    }
   }
 
   // Strategy 2: Email match

@@ -96,6 +96,8 @@ async function processPush(payload: GitHubPushPayload, clientId: string) {
       memberId,
       platform: 'GITHUB' as const,
       eventType: 'PUSH' as const,
+      // Commit SHA is globally unique — the natural idempotency key.
+      dedupeKey: `gh-push:${commit.id}`,
       eventData: {
         sha: commit.id,
         message: commit.message,
@@ -107,9 +109,8 @@ async function processPush(payload: GitHubPushPayload, clientId: string) {
     }));
 
     if (events.length > 0) {
-      await prisma.event.createMany({
-        data: events,
-      });
+      // Idempotent on webhook redelivery / backfill via dedupeKey.
+      await prisma.event.createMany({ data: events, skipDuplicates: true });
       logger.debug({ memberId, commitCount: events.length }, 'Push events created');
     }
   } catch (error) {
@@ -151,21 +152,25 @@ async function processPullRequest(payload: any, clientId: string) {
       eventType = 'PULL_REQUEST_CLOSED';
     }
 
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'GITHUB',
-        eventType,
-        eventData: {
-          number: pr.number,
-          title: pr.title,
-          url: pr.html_url,
-          repository: payload.repository?.full_name,
-          merged: pr.merged || false,
-        },
-        createdAt: new Date(pr.created_at || Date.now()),
+    const prData = {
+      clientId,
+      memberId,
+      platform: 'GITHUB' as const,
+      eventType,
+      dedupeKey: `gh-pr:${payload.repository?.full_name ?? ''}#${pr.number}:${eventType}`,
+      eventData: {
+        number: pr.number,
+        title: pr.title,
+        url: pr.html_url,
+        repository: payload.repository?.full_name,
+        merged: pr.merged || false,
       },
+      createdAt: new Date(pr.created_at || Date.now()),
+    };
+    await prisma.event.upsert({
+      where: { platform_dedupeKey: { platform: 'GITHUB', dedupeKey: prData.dedupeKey } },
+      update: { eventData: prData.eventData },
+      create: prData,
     });
 
     logger.debug({ memberId, prNumber: pr.number, eventType }, 'PR event created');
@@ -200,21 +205,25 @@ async function processIssue(payload: any, clientId: string) {
     const action = payload.action || 'opened';
     const eventType = action === 'opened' ? 'ISSUE_OPENED' : 'ISSUE_CLOSED';
 
-    await prisma.event.create({
-      data: {
-        clientId,
-        memberId,
-        platform: 'GITHUB',
-        eventType: eventType as any,
-        eventData: {
-          number: issue.number,
-          title: issue.title,
-          url: issue.html_url,
-          repository: payload.repository?.full_name,
-          labels: issue.labels?.map((l: any) => (typeof l === 'string' ? l : l.name)),
-        },
-        createdAt: new Date(issue.created_at || Date.now()),
+    const issueData = {
+      clientId,
+      memberId,
+      platform: 'GITHUB' as const,
+      eventType: eventType as any,
+      dedupeKey: `gh-issue:${payload.repository?.full_name ?? ''}#${issue.number}:${eventType}`,
+      eventData: {
+        number: issue.number,
+        title: issue.title,
+        url: issue.html_url,
+        repository: payload.repository?.full_name,
+        labels: issue.labels?.map((l: any) => (typeof l === 'string' ? l : l.name)),
       },
+      createdAt: new Date(issue.created_at || Date.now()),
+    };
+    await prisma.event.upsert({
+      where: { platform_dedupeKey: { platform: 'GITHUB', dedupeKey: issueData.dedupeKey } },
+      update: { eventData: issueData.eventData },
+      create: issueData,
     });
 
     logger.debug({ memberId, issueNumber: issue.number, eventType }, 'Issue event created');

@@ -5,7 +5,7 @@
 
 import cron from 'node-cron';
 import { Anthropic } from '@anthropic-ai/sdk';
-import { prisma, config, log } from '@attrakt/core';
+import { prisma, config, log, getActiveClients } from '@attrakt/core';
 import { addJob } from '@attrakt/api';
 import type { AgentThreatScanJobData } from '@attrakt/api/src/queues/types';
 
@@ -136,7 +136,7 @@ Be conservative - only flag clear threats. Avoid false positives.`;
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: config.claudeModel,
       max_tokens: 500,
       messages: [
         {
@@ -277,14 +277,15 @@ async function processThreatScanJob(clientId: string, platform?: 'DISCORD' | 'GI
 // Schedule threat scans every 15 minutes
 log.info({}, 'Threat Detection Agent starting');
 
-const clientId = config.defaultClientId;
-
-// Run every 15 minutes
+// Run every 15 minutes, scanning each active client (multi-tenant).
 cron.schedule('*/15 * * * *', async () => {
-  log.info({ clientId }, 'Running threat scan');
-  await scanForThreats(clientId).catch((error) => {
-    log.error({ error, clientId }, 'Failed to scan for threats');
-  });
+  const clients = await getActiveClients();
+  log.info({ clientCount: clients.length }, 'Running threat scan for active clients');
+  for (const client of clients) {
+    await scanForThreats(client.id).catch((error) => {
+      log.error({ error, clientId: client.id }, 'Failed to scan for threats');
+    });
+  }
 });
 
 // Export for use in worker

@@ -39,3 +39,4 @@ prisma/migrations/*.sql
 # Temporary files
 *.tmp
 *.temp
+*.tsbuildinfo

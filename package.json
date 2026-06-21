@@ -10,13 +10,26 @@
     "type-check": "pnpm --filter './packages/*' --filter './apps/*' type-check",
     "test": "pnpm --filter './packages/*' --filter './apps/*' test",
     "member:merge": "pnpm --filter @attrakt/core member:merge",
+    "member:exclude": "pnpm --filter @attrakt/core member:exclude",
+    "client:create": "pnpm --filter @attrakt/core client:create",
+    "ingest:backfill": "pnpm --filter @attrakt/mcp-servers ingest:backfill",
+    "scoring:run": "pnpm --filter @attrakt/agents scoring:run",
+    "brief:generate": "pnpm --filter @attrakt/agents brief:generate",
+    "seed:demo": "pnpm --filter @attrakt/core seed:demo",
+    "knowledge:add": "tsx packages/core/scripts/knowledge-add.ts",
+    "context:backfill": "pnpm --filter @attrakt/core context:backfill",
+    "context:synthesise": "tsx packages/agents/scripts/context-synthesise.ts",
+    "context:activate": "tsx packages/agents/scripts/context-activate.ts",
+    "campaign:brief": "tsx packages/agents/scripts/campaign-brief.ts",
+    "digest:run": "tsx packages/agents/scripts/digest-run.ts",
     "clean": "pnpm --filter './packages/*' --filter './apps/*' clean"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "typescript": "^5.3.3",
     "prettier": "^3.2.4",
-    "eslint": "^8.56.0"
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=20.0.0",
