@@ -255,9 +255,13 @@ Postgres). OpenAI as an alternative adapter.
   retention; clients can disconnect a source and purge its items.
 - **Cost:** embeddings + LLM synthesis cost scales with volume — chunk caps,
   incremental embedding, and summary caching keep it bounded.
-- **Build vs. buy connectors:** Domains B/D/E are dozens of SaaS APIs. Option to
-  use a unified integration provider (e.g. Nango / Merge / Paragon) to avoid
-  building/maintaining each OAuth flow. Decision in §9.
+- **Connectors built in-house (decided):** each source gets a thin in-house
+  adapter behind a common connector interface (auth + sync + normalize). No
+  third-party integration provider. This means the connector framework
+  (shared OAuth/token handling, sync scheduling, incremental cursors, retries)
+  is itself a CE-0 deliverable so adding a source is "implement the interface,"
+  not rebuild plumbing. Trade-off accepted: more maintenance across APIs in
+  exchange for full control and no per-connection vendor cost.
 
 ---
 
@@ -294,17 +298,34 @@ everything and is where the "queryable store, not one big file" promise is kept.
 
 ---
 
-## 9. Decisions needed before I implement
+## 9. Decisions
 
-1. **Connector strategy** — build OAuth integrations in-house, or adopt a unified
-   integration provider (Nango/Merge/Paragon) for Domains B/D/E to move faster?
-2. **Retrieval store** — pgvector on the existing Postgres (simplest, recommended)
-   vs. a dedicated vector DB?
-3. **Profile shape** — extend `ContextProfile` with new domain sections, or keep 5
-   stable "identity" sections + treat fast-moving domains as retrieval-only with
-   rolling summaries (recommended)?
-4. **First connectors after CE-0** — confirm the priority order (proposed:
-   GitHub-product + Linear first, matching the reference client's product pipeline).
-5. **Scope of CE-0** — agree CE-0 (foundation refactor) ships before any new
-   connector, so we never deepen the "one big file" pattern.
+**Resolved (2026-06-21):**
+1. ✅ **Connector strategy → build in-house.** A common connector interface +
+   shared plumbing (OAuth/token vault, sync scheduling, incremental cursors,
+   retries) is a CE-0 deliverable; each source is a thin adapter. No third-party
+   integration provider.
+2. ✅ **Profile shape → stable identity + retrieval.** Keep the 5 stable
+   `ContextProfile` sections (products, brandVoice, audience, marketingFunction,
+   strategicDirection) as the always-injected overview. Fast-moving domains
+   (product releases, campaigns, performance) are **retrieval-only with rolling
+   summaries** — not new profile sections.
+3. ✅ **Build order → CE-0 foundation first.** The structured store + retrieval +
+   refactor of existing grounding ships before any new connector, so we never
+   deepen the "one big file" pattern.
+
+**Defaults (assumed unless you object):**
+4. **Retrieval store → pgvector** on the existing Postgres (no dedicated vector DB).
+5. **First connectors after CE-0 → GitHub-product + Linear** (Domain B product
+   pipeline), matching the reference client's in-testing pipeline.
+
+**CE-0 deliverables (the foundation):**
+- `ContextSource` / `ContextItem` / `ContextChunk` / `ContextSyncRun` models + migration
+- pgvector + pluggable embeddings (default Voyage AI)
+- the in-house **connector interface** + shared sync/auth plumbing + BullMQ wiring
+- `queryContext()` retrieval API (hybrid semantic + structured)
+- refactor: manual `KnowledgeDocument` and existing community data → `ContextItem`;
+  grounding consumers switch from wholesale `formatContextForPrompt()` to
+  retrieval + small overview header
+- `/context` UI: add a Connections section (per-domain sources + sync status)
 </content>
