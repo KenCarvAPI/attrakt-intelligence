@@ -3,6 +3,8 @@
 import {
   Area,
   AreaChart,
+  CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,11 +17,24 @@ export interface ActivityPoint {
   events: number;
 }
 
+// en-GB day-month tick, e.g. "21 Jun".
 function tickLabel(date: string) {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function fullTickLabel(date: string) {
+  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function ActivityChart({ data }: { data: ActivityPoint[] }) {
+  const hasData = data.some((d) => d.messages > 0 || d.events > 0);
+  if (!hasData) {
+    return (
+      <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+        No activity recorded in the last 90 days yet.
+      </div>
+    );
+  }
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
@@ -33,6 +48,7 @@ export function ActivityChart({ data }: { data: ActivityPoint[] }) {
             <stop offset="100%" stopColor="hsl(190 80% 60%)" stopOpacity={0} />
           </linearGradient>
         </defs>
+        <CartesianGrid vertical={false} stroke="hsl(240 5% 14%)" strokeDasharray="3 3" />
         <XAxis
           dataKey="date"
           tickFormatter={tickLabel}
@@ -45,6 +61,7 @@ export function ActivityChart({ data }: { data: ActivityPoint[] }) {
           tickLine={false}
           axisLine={false}
           width={44}
+          allowDecimals={false}
           tick={{ fill: 'hsl(240 5% 50%)', fontSize: 11 }}
         />
         <Tooltip
@@ -56,7 +73,14 @@ export function ActivityChart({ data }: { data: ActivityPoint[] }) {
             fontSize: 12,
             color: 'hsl(0 0% 92%)',
           }}
-          labelFormatter={(d) => tickLabel(String(d))}
+          labelFormatter={(d) => fullTickLabel(String(d))}
+        />
+        <Legend
+          verticalAlign="top"
+          align="right"
+          height={28}
+          iconType="plainline"
+          wrapperStyle={{ fontSize: 12, color: 'hsl(240 5% 65%)' }}
         />
         <Area
           type="monotone"

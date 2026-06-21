@@ -64,14 +64,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function MemberPanel({ slug, memberId }: { slug: string; memberId: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     fetch(`/api/${slug}/members/${memberId}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load member (${r.status})`);
+        return r.json();
+      })
       .then((d) => active && setDetail(d))
+      .catch((e) => active && setError(e instanceof Error ? e.message : 'Failed to load member'))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
@@ -80,17 +86,26 @@ export function MemberPanel({ slug, memberId }: { slug: string; memberId: string
 
   async function regenerate() {
     setRegenerating(true);
-    const res = await fetch(`/api/${slug}/members/${memberId}`, { method: 'POST' });
-    const d = await res.json();
-    setDetail(d);
-    setRegenerating(false);
+    try {
+      const res = await fetch(`/api/${slug}/members/${memberId}`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      setDetail(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to regenerate brief');
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   return (
     <SheetContent className="overflow-y-auto p-0">
-      {loading || !detail ? (
+      {loading ? (
         <div className="flex h-full items-center justify-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : error || !detail ? (
+        <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+          <p>{error ?? 'Member not found.'}</p>
         </div>
       ) : (
         <>

@@ -1,7 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { deltaPct, fullNumber } from '@/lib/format';
+import { deltaPct, fullNumber, signedPct } from '@/lib/format';
 
 export function MetricCard({
   label,
@@ -44,7 +44,7 @@ export function MetricCard({
             ) : (
               <>
                 {up ? <ArrowUpRight className="h-3.5 w-3.5" /> : down ? <ArrowDownRight className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
-                {Math.abs(delta).toFixed(0)}%
+                {signedPct(Math.round(delta))}
               </>
             )}
           </div>

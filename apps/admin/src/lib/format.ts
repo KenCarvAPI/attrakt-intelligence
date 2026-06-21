@@ -11,6 +11,18 @@ export const PLATFORM_META: Record<Platform, { label: string; icon: LucideIcon; 
 
 export const ALL_PLATFORMS: Platform[] = ['DISCORD', 'GITHUB', 'TWITTER', 'DISCOURSE'];
 
+/**
+ * Consistent per-platform chart colour (HSL). Used by every chart and bar so a
+ * platform reads as the same colour across the whole dashboard. Mirrors the
+ * Tailwind text tints above.
+ */
+export const PLATFORM_CHART_COLOR: Record<Platform, string> = {
+  DISCORD: 'hsl(234 89% 74%)', // indigo
+  GITHUB: 'hsl(240 5% 65%)', // zinc
+  TWITTER: 'hsl(199 89% 64%)', // sky
+  DISCOURSE: 'hsl(38 92% 60%)', // amber
+};
+
 // --- Segments ---------------------------------------------------------------
 // Ordered most → least engaged.
 export const SEGMENT_ORDER: AdvocateSegment[] = ['CHAMPION', 'ADVOCATE', 'ACTIVE', 'CASUAL', 'LURKER'];
@@ -52,12 +64,26 @@ export const SEGMENT_META: Record<
 };
 
 // --- Numbers & dates --------------------------------------------------------
+// British English throughout: en-GB locale for both numbers (thousands
+// separators) and dates (e.g. "21 Jun 2026").
+const LOCALE = 'en-GB';
+
 export function compactNumber(n: number): string {
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  return new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 }
 
 export function fullNumber(n: number): string {
-  return new Intl.NumberFormat('en-US').format(n);
+  return new Intl.NumberFormat(LOCALE).format(n);
+}
+
+/** A signed percentage with thousands separators, e.g. "+12%" or "-3%". */
+export function signedPct(n: number, fractionDigits = 0): string {
+  const formatted = new Intl.NumberFormat(LOCALE, {
+    signDisplay: 'exceptZero',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(n);
+  return `${formatted}%`;
 }
 
 export function relativeTime(date: Date | string | null): string {
@@ -77,7 +103,8 @@ export function relativeTime(date: Date | string | null): string {
 export function shortDate(date: Date | string | null): string {
   if (!date) return '—';
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // en-GB: day-month-year, e.g. "21 Jun 2026".
+  return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** Percentage change of current vs prior; null when prior is 0. */

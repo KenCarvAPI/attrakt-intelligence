@@ -103,21 +103,30 @@ export function CampaignForm({
 }) {
   const [objective, setObjective] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<CampaignContent | null>(initial);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!objective.trim()) return;
     setBusy(true);
-    const res = await fetch(`/api/${slug}/context/campaign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ objective }),
-    });
-    const body = await res.json();
-    setContent(body.content);
-    setObjective('');
-    setBusy(false);
+    setError(null);
+    try {
+      const res = await fetch(`/api/${slug}/context/campaign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objective }),
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const body = await res.json();
+      if (!body?.content) throw new Error('No brief was returned.');
+      setContent(body.content);
+      setObjective('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate the brief.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -127,13 +136,26 @@ export function CampaignForm({
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
           placeholder="Campaign objective, e.g. grow delegate participation in Q3…"
+          disabled={busy}
         />
         <Button type="submit" disabled={busy || !objective.trim()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
           Generate
         </Button>
       </form>
-      {content && <BriefView content={content} />}
+
+      {busy && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Building the brief — pulling advocates, channels, and on-brand angles. This can take a few seconds.
+        </div>
+      )}
+      {error && !busy && (
+        <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {content && !busy && <BriefView content={content} />}
     </div>
   );
 }
