@@ -40,3 +40,9 @@ prisma/migrations/*.sql
 *.tmp
 *.temp
 *.tsbuildinfo
+
+# Compiled TypeScript must live in dist/, never alongside sources in src/.
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map

@@ -30,8 +30,8 @@ import {
   updateIngestionRun,
   finishIngestionRun,
 } from '@attrakt/core';
-import type { JobData } from '@attrakt/api/src/queues/types';
-import type { DiscoursePostPayload } from '@attrakt/core/src/types/platforms';
+import type { JobData } from '@attrakt/api';
+import type { DiscoursePostPayload } from '@attrakt/core';
 import { processPost } from '../discourse-bot/worker';
 
 interface BackfillCtx {
@@ -99,7 +99,7 @@ async function backfillDiscourse(ctx: BackfillCtx): Promise<number> {
           linked = (await dc.getUser(post.username))?.linkedAccounts ?? [];
           userCache.set(post.username, linked);
         }
-        await processPost(
+        const persisted = await processPost(
           {
             baseUrl: dc.baseUrl, postId: post.id, topicId: topic.id, topicTitle: topic.title,
             postNumber: post.post_number, userId: post.user_id, username: post.username,
@@ -110,7 +110,9 @@ async function backfillDiscourse(ctx: BackfillCtx): Promise<number> {
           } as DiscoursePostPayload,
           ctx.clientId
         );
-        pageItems++;
+        // Count only newly-persisted posts, not idempotent skips, so the run's
+        // itemsIngested reflects real new data even on a re-run/resume.
+        if (persisted) pageItems++;
       }
     }
     total += pageItems;

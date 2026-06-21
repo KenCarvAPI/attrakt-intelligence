@@ -8,7 +8,7 @@
 import { Queue } from 'bullmq';
 import { computeAdvocateScores, config, log } from '@attrakt/core';
 import { redisConnection } from '@attrakt/api';
-import type { ComputeScoringJobData } from '@attrakt/api/src/queues/types';
+import type { ComputeScoringJobData } from '@attrakt/api';
 import { evaluateHelpfulness } from './helpfulness';
 
 /**

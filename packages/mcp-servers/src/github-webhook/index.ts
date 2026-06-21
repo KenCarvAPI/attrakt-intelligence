@@ -1,6 +1,6 @@
 import express from 'express';
 import { addJob, resolveClientIdByPlatform, config, log } from '@attrakt/core';
-import type { JobData } from '@attrakt/api/src/queues/types';
+import type { JobData } from '@attrakt/api';
 import { verifyGithubSignature } from './verify';
 
 /**

@@ -16,8 +16,8 @@
  * ANTHROPIC_API_KEY is configured.
  */
 
-import type { CampaignBrief, ContextProfile, Platform } from '@prisma/client';
-import { prisma, log, loadActiveContextProfile, formatContextForPrompt } from '@attrakt/core';
+import type { CampaignBrief, ContextProfile } from '@prisma/client';
+import { prisma, log, loadActiveContextProfile, formatContextForPrompt, SCORABLE_MEMBER_WHERE } from '@attrakt/core';
 import { callClaude, extractJson, isLLMAvailable, loadPrompt } from '../llm';
 
 interface Advocate {
@@ -74,8 +74,9 @@ function topicsFromText(texts: string[]): string[] {
 
 /** Compute advocacy, channel, and segment signals from ingestion data. */
 export async function gatherCommunitySignals(clientId: string): Promise<CommunitySignals> {
+  // Never feature merged (deletedAt) or opted-out (excluded) members as advocates.
   const members = await prisma.member.findMany({
-    where: { clientId },
+    where: { clientId, ...SCORABLE_MEMBER_WHERE },
     include: {
       platformIdentities: true,
       messages: { take: 10, orderBy: { createdAt: 'desc' } },
