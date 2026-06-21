@@ -65,7 +65,8 @@ The product as actually built is **broader** than the original
 | Overview: active/new members, messages, **governance posts**, activity chart, **segment distribution**, messages-by-platform | ✅ built | `[clientSlug]/page.tsx` |
 | Members directory + member panel (advocate score + advocate brief) | ✅ built | `members/`, `member-panel.tsx` |
 | **Context Engine** — knowledge intake → versioned profile → campaign brief | ✅ built | `context/page.tsx`, `context-agent` |
-| **Context Engine** — platform API connection management (in-UI) | 🟡 backend-only | `PlatformConfig` model exists; operator/CLI today, planned in-UI |
+| **Context Engine** — structured store + retrieval (CE-0) | ✅ built | `packages/core/src/context/*`; see `docs/CONTEXT_ENGINE.md` |
+| **Context Engine** — in-UI source connection management | 🟡 partial | Connections panel + `ContextSource` model built; SaaS connect flows = CE-1 |
 | Advocate scoring + segments (Champion→Lurker) | ✅ built | `AdvocateScore`, `scoring/score.ts` |
 | Helpfulness evaluation (Claude-scored) | ✅ built | `HelpfulnessEvaluation` |
 | Weekly digest / ecosystem health report | ✅ built | `WeeklyDigest`, `pulse-weekly-v1` |

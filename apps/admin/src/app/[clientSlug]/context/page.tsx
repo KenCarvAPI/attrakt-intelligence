@@ -7,13 +7,14 @@ import { KnowledgeList } from '@/components/knowledge-list';
 import { IntakeForm } from '@/components/intake-form';
 import { ResynthesiseButton } from '@/components/resynthesise-button';
 import { CampaignForm } from '@/components/campaign-form';
+import { ConnectionsPanel } from '@/components/connections-panel';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ContextPage({ params }: { params: { clientSlug: string } }) {
   const client = await getClient(params.clientSlug);
   if (!client) notFound();
-  const { profile, documents, campaign } = await getContext(client.id);
+  const { profile, documents, campaign, sources, itemCount } = await getContext(client.id);
 
   return (
     <div className="space-y-8">
@@ -21,7 +22,8 @@ export default async function ContextPage({ params }: { params: { clientSlug: st
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Context engine</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            The synthesised understanding of {client.name}, grounding every advocate and campaign output.
+            Connections + synthesised understanding of {client.name} — the structured, queryable
+            store that grounds every advocate and campaign output.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -29,6 +31,22 @@ export default async function ContextPage({ params }: { params: { clientSlug: st
           <ResynthesiseButton slug={client.slug} />
         </div>
       </div>
+
+      {/* Connections */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Connections</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Connected data sources</CardTitle>
+            <CardDescription>
+              Live sources feeding the intelligence layer across the five context domains.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ConnectionsPanel sources={sources} itemCount={itemCount} />
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Active profile */}
       <section className="space-y-4">

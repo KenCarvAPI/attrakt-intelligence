@@ -184,10 +184,12 @@ export async function getMemberDetail(clientId: string, memberId: string) {
 
 // --- Context ----------------------------------------------------------------
 export async function getContext(clientId: string) {
-  const [profile, documents, campaign] = await Promise.all([
+  const [profile, documents, campaign, sources, itemCount] = await Promise.all([
     prisma.contextProfile.findFirst({ where: { clientId, status: 'active' }, orderBy: { version: 'desc' } }),
     prisma.knowledgeDocument.findMany({ where: { clientId }, orderBy: { uploadedAt: 'desc' } }),
     prisma.campaignBrief.findFirst({ where: { clientId }, orderBy: { createdAt: 'desc' } }),
+    prisma.contextSource.findMany({ where: { clientId }, orderBy: [{ domain: 'asc' }, { connector: 'asc' }] }),
+    prisma.contextItem.count({ where: { clientId } }),
   ]);
-  return { profile, documents, campaign };
+  return { profile, documents, campaign, sources, itemCount };
 }

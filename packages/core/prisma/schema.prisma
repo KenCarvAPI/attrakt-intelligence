@@ -39,6 +39,9 @@ model Client {
   campaignBriefs         CampaignBrief[]
   weeklyDigests          WeeklyDigest[]
   ingestionRuns          IngestionRun[]
+  contextSources         ContextSource[]
+  contextItems           ContextItem[]
+  contextChunks          ContextChunk[]
 
   @@index([active])
   @@map("clients")
@@ -517,4 +520,120 @@ model CampaignBrief {
 
   @@index([clientId, createdAt])
   @@map("campaign_briefs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context Engine (CE-0): the integration + grounding layer.
+//
+// Many connected sources (strategy/brand docs, product updates, community/
+// ecosystem signals, marketing ops, marketing performance) are normalized into
+// a STRUCTURED, QUERYABLE store — ContextItem (typed records) + ContextChunk
+// (embedded retrieval units) — rather than one big profile loaded wholesale.
+// The synthesized ContextProfile remains the stable "identity" overview; fast-
+// moving domains are served by retrieval (queryContext()).
+// See docs/CONTEXT_ENGINE.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The five domains a connected source belongs to.
+enum ContextDomain {
+  STRATEGY        // brand, growth, ecosystem strategy, positioning
+  PRODUCT         // product updates: releases, roadmap, changelogs (GitHub, Linear, ...)
+  COMMUNITY       // external community & ecosystem signals (Discord/GitHub/Twitter/Discourse)
+  MARKETING_OPS   // content calendars, campaign planners, team activity
+  MARKETING_DATA  // analytics, ad performance, social analytics, user research
+}
+
+// A connected data source for a client (generalizes PlatformConfig). One row per
+// (client, connector instance). Credentials live in a vault referenced by
+// credentialRef — never stored inline.
+model ContextSource {
+  id            String        @id @default(cuid())
+  clientId      String
+  domain        ContextDomain
+  connector     String        // "manual" | "community" | "github_product" | "linear" | "notion" | "ga4" | ...
+  label         String?       // human label, e.g. "Marketing Notion" or repo name
+  status        String        @default("connected") // connected | error | disabled
+  config        Json          @default("{}") // connector-specific (repos, property ids, board ids)
+  credentialRef String?       // pointer into the secret vault; no secrets in this row
+  cadence       String?       // "webhook" | cron expression | "manual"
+  lastSyncedAt  DateTime?
+  lastError     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  client   Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items    ContextItem[]
+  syncRuns ContextSyncRun[]
+
+  @@unique([clientId, connector, label])
+  @@index([clientId, domain])
+  @@map("context_sources")
+}
+
+// A normalized record from any source. The common envelope every connector maps
+// into, so the store is uniformly queryable by domain/kind/recency.
+model ContextItem {
+  id          String        @id @default(cuid())
+  clientId    String
+  sourceId    String?
+  domain      ContextDomain
+  kind        String        // document | release | issue | campaign | metric_snapshot | research | community_signal
+  externalId  String?       // id in the source system (for supersede/update)
+  title       String?
+  url         String?
+  structured  Json          @default("{}") // typed fields specific to the kind
+  text        String?       // narrative text — chunked + embedded into ContextChunk
+  occurredAt  DateTime?     // when it happened in the source
+  ingestedAt  DateTime      @default(now())
+  contentHash String        // sha256 for dedupe / supersede
+  metadata    Json?         @default("{}")
+
+  client  Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  source  ContextSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  chunks  ContextChunk[]
+
+  @@unique([clientId, contentHash])
+  @@index([clientId, domain, occurredAt])
+  @@index([clientId, kind])
+  @@index([externalId])
+  @@map("context_items")
+}
+
+// A retrieval unit: a chunk of an item's text plus its embedding. Embedding is
+// stored as a Float[] (plain Postgres) for MVP; cosine similarity is computed in
+// the retrieval service. pgvector is the documented upgrade path (swap the column
+// type + push similarity into SQL) without changing the surrounding code.
+model ContextChunk {
+  id         String   @id @default(cuid())
+  clientId   String
+  itemId     String
+  ordinal    Int      @default(0) // position within the item
+  text       String
+  embedding  Float[]            // length = embedding provider dimensions; empty if unembedded
+  tokenCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  client Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  item   ContextItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([itemId])
+  @@map("context_chunks")
+}
+
+// Observability for a connector sync cycle.
+model ContextSyncRun {
+  id            String    @id @default(cuid())
+  sourceId      String
+  status        String    @default("running") // running | success | failed
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  itemsIngested Int       @default(0)
+  itemsDeduped  Int       @default(0)
+  error         String?
+
+  source ContextSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, startedAt])
+  @@map("context_sync_runs")
 }

@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import type { KnowledgeDocument, KnowledgeSourceType } from '@prisma/client';
 import { prisma } from '../prisma';
 import { log } from '../logger';
+import { projectKnowledgeDocument } from '../context/store';
 
 /**
  * Maximum number of characters we persist in `rawText`. Documents larger than
@@ -125,6 +126,18 @@ export async function ingestKnowledgeDocument(
     },
     'Knowledge document ingested'
   );
+
+  // Project into the Context Engine store (chunk + embed) so manual uploads are
+  // retrievable alongside connector data. Best-effort: a failure here must not
+  // fail intake — the backfill script (context:backfill) can reconcile later.
+  try {
+    await projectKnowledgeDocument(document);
+  } catch (err) {
+    log.error(
+      { err, clientId: input.clientId, documentId: document.id },
+      'Knowledge document ingested but Context Engine projection failed (run context:backfill to reconcile)'
+    );
+  }
 
   return { document, deduped: false, truncated };
 }

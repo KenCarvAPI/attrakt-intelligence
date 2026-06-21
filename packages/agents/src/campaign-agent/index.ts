@@ -17,7 +17,7 @@
  */
 
 import type { CampaignBrief, ContextProfile, Platform } from '@prisma/client';
-import { prisma, log, loadActiveContextProfile, formatContextForPrompt } from '@attrakt/core';
+import { prisma, log, loadActiveContextProfile, formatContextForPrompt, queryContext } from '@attrakt/core';
 import { callClaude, extractJson, isLLMAvailable, loadPrompt } from '../llm';
 
 interface Advocate {
@@ -235,14 +235,21 @@ function deterministicBrief(
 async function buildBriefContent(
   objective: string,
   profile: ContextProfile | null,
-  signals: CommunitySignals
+  signals: CommunitySignals,
+  retrieved: string
 ): Promise<{ content: Record<string, unknown>; usedLLM: boolean }> {
+  // Grounding = stable profile overview (who they are) + retrieved specifics
+  // relevant to THIS objective (recent releases, live campaigns, performance).
+  const context = retrieved
+    ? `${formatContextForPrompt(profile)}\n\n${retrieved}`
+    : formatContextForPrompt(profile);
+
   if (isLLMAvailable()) {
     try {
       const raw = await callClaude({
         system: 'You output only valid JSON matching the requested schema exactly.',
         user: loadPrompt('campaign-brief.v1.md', {
-          CONTEXT: formatContextForPrompt(profile),
+          CONTEXT: context,
           OBJECTIVE: objective,
           SIGNALS: renderSignals(signals),
         }),
@@ -264,17 +271,36 @@ export async function generateCampaignBrief(
   const profile = await loadActiveContextProfile(clientId);
   const signals = await gatherCommunitySignals(clientId);
 
+  // Retrieve objective-relevant context from the structured store (instead of
+  // dumping everything). Best-effort: retrieval failure falls back to the
+  // profile overview alone.
+  let retrieved = '';
+  let retrievedCount = 0;
+  try {
+    const res = await queryContext({ clientId, intent: objective, k: 6 });
+    retrieved = res.groundingBlock;
+    retrievedCount = res.snippets.length;
+  } catch (error) {
+    log.warn({ error, clientId }, 'Context retrieval failed; grounding on profile overview only');
+  }
+
   log.info(
-    { clientId, hasContext: Boolean(profile), advocates: signals.advocates.length },
+    {
+      clientId,
+      hasContext: Boolean(profile),
+      retrievedSnippets: retrievedCount,
+      advocates: signals.advocates.length,
+    },
     'Generating campaign brief'
   );
 
-  const { content, usedLLM } = await buildBriefContent(objective, profile, signals);
+  const { content, usedLLM } = await buildBriefContent(objective, profile, signals, retrieved);
 
   // Annotate provenance so the stored brief is self-describing.
   content.generatedWith = usedLLM ? 'claude' : 'deterministic-fallback';
   content.contextProfileVersion = profile?.version ?? null;
   content.runningWithoutContext = !profile;
+  content.retrievedSnippets = retrievedCount;
 
   const brief = await prisma.campaignBrief.create({
     data: { clientId, objective, content: content as object },

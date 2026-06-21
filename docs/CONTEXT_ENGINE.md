@@ -1,7 +1,31 @@
 # Context Engine — Design (for approval)
 
 **Date:** 2026-06-21
-**Status:** Proposal — review & approve before implementation
+**Status:** ✅ CE-0 (foundation) implemented · later phases proposed
+
+> **CE-0 shipped (2026-06-21).** The structured queryable store, retrieval, the
+> in-house connector framework, and the grounding refactor are built and tested.
+> What landed:
+> - Models: `ContextSource`, `ContextItem`, `ContextChunk`, `ContextSyncRun` +
+>   `ContextDomain` enum (migration `20260621000000_context_engine`).
+> - Embeddings: pluggable provider — **Voyage AI** when `VOYAGE_API_KEY` is set,
+>   else a deterministic hash fallback so it runs offline/in CI
+>   (`src/context/embeddings.ts`).
+> - Vector storage: `embedding Float[]` on plain Postgres; cosine similarity in
+>   the service layer. **pgvector is the documented upgrade path** (swap column
+>   type + push ranking into SQL; callers unchanged).
+> - Store + retrieval: `upsertContextItem`, `projectKnowledgeDocument`,
+>   `backfillKnowledgeDocuments`, `queryContext()` (token-bounded grounding).
+> - Connector framework: `Connector` interface + registry + `runSync()` (records
+>   `ContextSyncRun`). SaaS connectors are CE-1+.
+> - Wiring: manual knowledge intake now projects into the store; the
+>   campaign-agent grounds on **profile overview + retrieved snippets** instead of
+>   wholesale; `pnpm context:backfill` reconciles existing data; admin `/context`
+>   gains a **Connections** panel.
+> - Tests: 16 unit tests (chunking, cosine/ranking, embeddings, hashing, grounding
+>   budget) green alongside the existing suite.
+
+**Originally:** Proposal — review & approve before implementation
 **Related:** `docs/SITEMAP_AND_UI_PLAN.md` (Pillar B), built code in
 `packages/core/src/services/{knowledge,context-profile}.ts`,
 `packages/agents/src/context-agent/`, `apps/admin/src/app/[clientSlug]/context/`.
@@ -269,7 +293,7 @@ Postgres). OpenAI as an alternative adapter.
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **CE-0 Foundation** | Structured store (`ContextSource`/`ContextItem`/`ContextChunk`), pgvector + embeddings, `queryContext()`, refactor manual `KnowledgeDocument` + existing community data into the store, switch grounding from wholesale → retrieval-augmented | The architecture is right; existing features keep working, now retrieval-based |
+| **CE-0 Foundation** ✅ | Structured store (`ContextSource`/`ContextItem`/`ContextChunk`/`ContextSyncRun`), embeddings + retrieval, in-house connector framework, refactor manual `KnowledgeDocument` into the store, switch grounding from wholesale → retrieval-augmented | **Done 2026-06-21.** Existing features keep working, now retrieval-based. (Community-data projection into items deferred into CE-1 alongside the first connectors.) |
 | **CE-1 Product pipeline (Domain B)** | GitHub product extraction + **Linear** | "Product updates across the org" (matches the reference client's in-testing pipeline) |
 | **CE-2 Strategy & ops (A + D)** | Notion + Google Drive/Docs + Airtable + Calendar | Strategy/brand store + marketing activity feed |
 | **CE-3 Performance (Domain E)** | GA4 + Google Ads + Meta Ads + social analytics | Quantitative grounding & performance summaries |
